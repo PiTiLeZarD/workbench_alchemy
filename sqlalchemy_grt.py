@@ -1,7 +1,16 @@
+
+
 import re
 
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
+
+def singular( name ):
+    if name.endswith('ies'):
+        name = name[:-3] + 'y'
+    if name.endswith('s'):
+        name = name[:-1]
+    return name
 
 for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     primary = []
@@ -19,11 +28,11 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     foreignKeys = {}
     for fk in table.foreignKeys:
         for i in range(0, len(fk.columns)):
-            foreignKeys[fk.columns[i].name] = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
+            relation = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
+            fktable = camelize(fk.referencedColumns[i].owner.name)
+            foreignKeys[fk.columns[i].name] = (relation, fktable)
 
-    classname = camelize( table.name )
-    if classname.endswith('s'):
-        classname = classname[:-1]
+    classname = singular( camelize( table.name ) )
 
     print "class %s(Base):" % classname
     print "  __tablename__ = '%s'" % table.name
@@ -37,7 +46,7 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
 
         options = []
         if column.name in foreignKeys:
-            options.append('ForeignKey("%s")' % foreignKeys[column.name])
+            options.append('ForeignKey("%s")' % foreignKeys[column.name][0])
         if column.isNotNull == 1:
             options.append('nullable=False')
         if 'UNSIGNED' in column.flags:
@@ -57,7 +66,15 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
         print "  %s = Column( %s%s )" % (column.name, type, options)
 
     print ""
+    for k, v in foreignKeys.items():
+        attr = singular(v[1])
+        attr = attr[0].lower() + attr[1:]
+        
+        backref = camelize(table.name)
+        backref = backref[0].lower() + backref[1:]
+        print '  %s = relationship( "%s", backref="%s" )' % (attr, v[1], backref)
 
+    print ""
     print '  def __repr__( self ):'
     print '    return self.__str__()'
 
