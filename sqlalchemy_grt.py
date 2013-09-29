@@ -52,7 +52,7 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
         if 'UNSIGNED' in column.flags:
             options.append('unsigned=True')
         if column.name in primary:
-            options.append('primary=True')
+            options.append('primary_key=True')
         if column.name in indices:
             options.append('index=True')
         if column.name in unique:
