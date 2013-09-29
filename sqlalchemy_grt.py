@@ -30,7 +30,12 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
         for i in range(0, len(fk.columns)):
             relation = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
             fktable = camelize(fk.referencedColumns[i].owner.name)
-            foreignKeys[fk.columns[i].name] = (relation, fktable)
+            ondelete = onupdate = None
+            if fk.deleteRule and fk.deleteRule != "NO ACTION":
+                ondelete = fk.deleteRule
+            if fk.updateRule and fk.updateRule != "NO ACTION":
+                onupdate = fk.updateRule
+            foreignKeys[fk.columns[i].name] = (relation, fktable, ondelete, onupdate)
 
     classname = singular( camelize( table.name ) )
 
@@ -46,7 +51,12 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
 
         options = []
         if column.name in foreignKeys:
-            options.append('ForeignKey("%s")' % foreignKeys[column.name][0])
+            fkcol, fktable, ondelete, onupdate = foreignKeys[column.name]
+            fkopts = []
+            if ondelete: fkopts.append('ondelete="%s"' % ondelete)
+            if onupdate: fkopts.append('onupdate="%s"' % onupdate)
+            fkopts = len(fkopts) and ', ' + ', '.join(fkopts) or ''
+            options.append('ForeignKey("%s"%s)' % (fkcol, fkopts))
         if column.isNotNull == 1:
             options.append('nullable=False')
         if 'UNSIGNED' in column.flags:
