@@ -77,12 +77,13 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
 
     print ""
     for k, v in foreignKeys.items():
-        attr = singular(v[1])
+        fkcol, fktable, ondelete, onupdate = v
+        attr = singular(fktable)
         attr = attr[0].lower() + attr[1:]
         
         backref = camelize(table.name)
         backref = backref[0].lower() + backref[1:]
-        print '  %s = relationship( "%s", backref="%s" )' % (attr, v[1], backref)
+        print '  %s = relationship( "%s", backref="%s" )' % (attr, singular(fktable), backref)
 
     print ""
     print '  def __repr__( self ):'

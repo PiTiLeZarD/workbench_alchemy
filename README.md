@@ -17,7 +17,7 @@ class Customer(Base):
   name = Column( String(45), index=True )
   locality_id = Column( Integer, ForeignKey("localities.id", ondelete="CASCADE"), nullable=False, index=True )
 
-  locality = relationship( "Localities", backref="customers" )
+  locality = relationship( "Locality", backref="customers" )
 
   def __repr__( self ):
     return self.__str__()
