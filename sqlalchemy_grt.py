@@ -1,6 +1,6 @@
-
-
 import re
+
+version = '0.1'
 
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
@@ -12,10 +12,12 @@ def singular( name ):
         name = name[:-1]
     return name
 
-for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
+def exportTable( table ):
+    export = []
     primary = []
     indices = []
     unique = []
+
     for index in table.indices:
         for column in index.columns:
             if index.indexType == 'PRIMARY':
@@ -39,9 +41,9 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
 
     classname = singular( camelize( table.name ) )
 
-    print "class %s(Base):" % classname
-    print "  __tablename__ = '%s'" % table.name
-    print "  "
+    export.append("class %s(Base):" % classname)
+    export.append("  __tablename__ = '%s'" % table.name)
+    export.append("  ")
 
     for column in table.columns:
         type = camelize( column.formattedType.lower() )
@@ -73,9 +75,9 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
         else:
             options = ''
 
-        print "  %s = Column( %s%s )" % (column.name, type, options)
+        export.append("  %s = Column( %s%s )" % (column.name, type, options))
 
-    print ""
+    export.append("")
     for k, v in foreignKeys.items():
         fkcol, fktable, ondelete, onupdate = v
         attr = singular(fktable)
@@ -83,17 +85,38 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
         
         backref = camelize(table.name)
         backref = backref[0].lower() + backref[1:]
-        print '  %s = relationship( "%s", backref="%s" )' % (attr, singular(fktable), backref)
+        export.append('  %s = relationship( "%s", backref="%s" )' % (attr, singular(fktable), backref))
 
-    print ""
-    print '  def __repr__( self ):'
-    print '    return self.__str__()'
+    export.append("")
+    export.append('  def __repr__( self ):')
+    export.append('    return self.__str__()')
 
-    print ""
+    export.append("")
 
-    print '  def __str__( self ):'
-    print "    return '<"+classname+" "+ ' '.join(['%('+i+')s' for i in primary]) +">' % self.__dict__"
+    export.append('  def __str__( self ):')
+    export.append("    return '<"+classname+" "+ ' '.join(['%('+i+')s' for i in primary]) +">' % self.__dict__")
 
-    print ""
-    print ""
+    export.append("")
+    
+    return export
+
+print "-"*20
+print "-- SQLAlchemy export v%s" % version
+print "-"*20
+
+export = []
+
+export.append("from sqlalchemy.orm import relationship")
+export.append("from sqlalchemy import Column, Integer, String, Date, Float, ForeignKey")
+export.append("from sqlalchemy.ext.declarative import declarative_base")
+export.append("")
+export.append("Base = declarative_base()")
+export.append("")
+
+for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
+    print " -> Working on %s" % table.name
+    export.extend( exportTable(table) )
+
+grt.modules.Workbench.copyToClipboard('\n'.join(export))
+print "Copied to clipboard"
 

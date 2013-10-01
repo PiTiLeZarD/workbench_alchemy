@@ -6,10 +6,31 @@ SQLAlchemy model creation for MySQL Workbench
 ### Want to see?
 
 This:
+
 <img src="example.png" alt="Example" style="width: 100%;"/>
 
-Translates to that:
+On execution it should look like this:
+```
+Executing script /Users/xxx/Library/Application Support/MySQL/Workbench/scripts/sqlalchemy_grt.py...
+--------------------
+-- SQLAlchemy export v0.1
+--------------------
+ -> Working on customers
+ -> Working on localities
+Copied to clipboard
+
+Script finished.
+```
+
+The you just have to paste it somewhere, hopefully it looks like this:
+
 ```python
+from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Date, Float, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+
 class Customer(Base):
   __tablename__ = 'customers'
   
@@ -24,7 +45,6 @@ class Customer(Base):
 
   def __str__( self ):
     return '<Customer %(id)s>' % self.__dict__
-
 
 class Locality(Base):
   __tablename__ = 'localities'
