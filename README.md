@@ -13,16 +13,17 @@ On execution it should look like this:
 ```
 Executing script /Users/xxx/Library/Application Support/MySQL/Workbench/scripts/sqlalchemy_grt.py...
 --------------------
--- SQLAlchemy export v0.1
+-- SQLAlchemy export v0.3
 --------------------
  -> Working on customers
  -> Working on localities
 Copied to clipboard
 
 Script finished.
+
 ```
 
-The you just have to paste it somewhere, hopefully it looks like this:
+Then you just have to paste it somewhere, hopefully it looks like this:
 
 ```python
 from sqlalchemy.orm import relationship
@@ -34,9 +35,9 @@ Base = declarative_base()
 class Customer(Base):
   __tablename__ = 'customers'
   
-  id = Column( Integer, nullable=False, primary_key=True )
+  id = Column( "id_customer", Integer, nullable=False, primary_key=True )
   name = Column( String(45), index=True )
-  locality_id = Column( Integer, ForeignKey("localities.id", ondelete="CASCADE"), nullable=False, index=True )
+  locality_id = Column( Integer, ForeignKey("localities.id_locality", ondelete="CASCADE"), nullable=False, index=True )
 
   locality = relationship( "Locality", backref="customers" )
 
@@ -44,12 +45,12 @@ class Customer(Base):
     return self.__str__()
 
   def __str__( self ):
-    return '<Customer %(id)s>' % self.__dict__
+    return '<Customer %(id_customer)s>' % self.__dict__
 
 class Locality(Base):
   __tablename__ = 'localities'
   
-  id = Column( Integer, nullable=False, primary_key=True )
+  id = Column( "id_locality", Integer, nullable=False, primary_key=True )
   name = Column( String(45), unique=True )
 
 
@@ -57,5 +58,5 @@ class Locality(Base):
     return self.__str__()
 
   def __str__( self ):
-    return '<Locality %(id)s>' % self.__dict__
+    return '<Locality %(id_locality)s>' % self.__dict__
 ```

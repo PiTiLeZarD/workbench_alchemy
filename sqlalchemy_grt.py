@@ -1,6 +1,6 @@
 import re
 
-version = '0.2'
+version = '0.3'
 
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
@@ -48,6 +48,9 @@ def exportTable( table ):
     export.append("  ")
 
     for column in table.columns:
+        column_name = column.name
+        column_alias = ''
+
         type = camelize( column.formattedType.lower() )
         for o, n in (('Varchar', 'String'), ('Int', 'Integer')):
             type = type.replace(o,n)
@@ -67,6 +70,9 @@ def exportTable( table ):
             options.append('unsigned=True')
         if column.name in primary:
             options.append('primary_key=True')
+            if (len(primary) == 1) and (column_name != 'id'):
+                column_alias = '"%s", ' % column_name
+                column_name = 'id'
         if column.name in indices:
             options.append('index=True')
         if column.name in unique:
@@ -77,7 +83,7 @@ def exportTable( table ):
         else:
             options = ''
 
-        export.append("  %s = Column( %s%s )" % (column.name, type, options))
+        export.append("  %s = Column( %s%s%s )" % (column_name, column_alias, type, options))
 
     export.append("")
     for k, v in foreignKeys.items():
