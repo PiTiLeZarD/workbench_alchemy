@@ -1,6 +1,6 @@
 import re
 
-version = '0.1'
+version = '0.2'
 
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
@@ -8,7 +8,9 @@ def camelize( name ):
 def singular( name ):
     if name.endswith('ies'):
         name = name[:-3] + 'y'
-    if name.endswith('s'):
+    if name.endswith('ses'):
+        name = name[:-2]
+    elif name.endswith('s'):
         name = name[:-1]
     return name
 
