@@ -1,11 +1,13 @@
 import re
 
-version = '0.3'
+version = '0.4'
 
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
 
 def singular( name ):
+    if name.endswith('ices'):
+        name = name[:-4] + 'ex'
     if name.endswith('ies'):
         name = name[:-3] + 'y'
     if name.endswith('ses'):
@@ -13,6 +15,16 @@ def singular( name ):
     elif name.endswith('s'):
         name = name[:-1]
     return name
+
+def getType( column ):
+    type = camelize( column.formattedType.lower() )
+    for o, n in (('Varchar', 'String'), ('Int', 'Integer'), ('Tinyint', 'MySQLTinyint'), ('Text', 'MySQLText')):
+        type = type.replace(o,n)
+    type = re.sub(r"Integer\([^\)]\)", "Integer", type)
+    if 'UNSIGNED' in column.flags:
+        if type == 'Integer':
+            type = "MySQLInteger(unsigned=True)"
+    return type
 
 def exportTable( table ):
     export = []
@@ -31,7 +43,9 @@ def exportTable( table ):
 
     foreignKeys = {}
     for fk in table.foreignKeys:
-        for i in range(0, len(fk.columns)):
+        if len(fk.referencedColumns) > 1:
+            continue
+        for i in range(0, len(fk.referencedColumns)):
             relation = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
             fktable = camelize(fk.referencedColumns[i].owner.name)
             ondelete = onupdate = None
@@ -47,14 +61,11 @@ def exportTable( table ):
     export.append("  __tablename__ = '%s'" % table.name)
     export.append("  ")
 
+    aliases = {}
     for column in table.columns:
         column_name = column.name
         column_alias = ''
-
-        type = camelize( column.formattedType.lower() )
-        for o, n in (('Varchar', 'String'), ('Int', 'Integer')):
-            type = type.replace(o,n)
-        type = re.sub(r"Integer\([^\)]\)", "Integer", type)
+        column_type = getType(column)
 
         options = []
         if column.name in foreignKeys:
@@ -66,13 +77,16 @@ def exportTable( table ):
             options.append('ForeignKey("%s"%s)' % (fkcol, fkopts))
         if column.isNotNull == 1:
             options.append('nullable=False')
-        if 'UNSIGNED' in column.flags:
-            options.append('unsigned=True')
+        if column.autoIncrement == 1:
+            options.append('autoincrement=True')
         if column.name in primary:
             options.append('primary_key=True')
             if (len(primary) == 1) and (column_name != 'id'):
+                aliases[column_name] = 'id'
                 column_alias = '"%s", ' % column_name
                 column_name = 'id'
+            elif column.autoIncrement != 1:
+                options.append('autoincrement=False')
         if column.name in indices:
             options.append('index=True')
         if column.name in unique:
@@ -83,17 +97,22 @@ def exportTable( table ):
         else:
             options = ''
 
-        export.append("  %s = Column( %s%s%s )" % (column_name, column_alias, type, options))
+        export.append("  %s = Column( %s%s%s )" % (column_name, column_alias, column_type, options))
 
     export.append("")
     for k, v in foreignKeys.items():
         fkcol, fktable, ondelete, onupdate = v
         attr = singular(fktable)
         attr = attr[0].lower() + attr[1:]
+
+        if 'norelations' in table.comment:
+            export.append('  # relationship %s ignored' % attr)
+            continue
         
         backref = camelize(table.name)
         backref = backref[0].lower() + backref[1:]
-        export.append('  %s = relationship( "%s", backref="%s" )' % (attr, singular(fktable), backref))
+        export.append('  %s = relationship( "%s", foreign_keys=[%s], backref="%s" )' % (attr, singular(fktable), aliases.get(k,k), backref))
+
 
     export.append("")
     export.append('  def __repr__( self ):')
@@ -113,9 +132,19 @@ print "-- SQLAlchemy export v%s" % version
 print "-"*20
 
 export = []
+export.append('"""')
+export.append('This file has been automatically generated with workbench_alchemy v%s' % version)
+export.append('For more details please check here:')
+export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
+export.append('"""')
 
+export.append("")
 export.append("from sqlalchemy.orm import relationship")
-export.append("from sqlalchemy import Column, Integer, String, Date, Float, ForeignKey")
+export.append("from sqlalchemy import Column, ForeignKey")
+export.append("from sqlalchemy import Integer, String, Date, DateTime as Datetime, Float")
+export.append("from sqlalchemy.dialects.mysql import INTEGER as MySQLInteger")
+export.append("from sqlalchemy.dialects.mysql import TINYINT as MySQLTinyint")
+export.append("from sqlalchemy.dialects.mysql import TEXT as MySQLText")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
 export.append("")
 export.append("Base = declarative_base()")
