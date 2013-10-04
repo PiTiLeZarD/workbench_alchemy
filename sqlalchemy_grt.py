@@ -1,6 +1,24 @@
 import re
 
-version = '0.5'
+version = '0.6'
+
+types = {
+    'sqla': [],
+    'mysql': []
+}
+typesmap = {
+    'INT': 'INTEGER',
+}
+sqlalchemy_typesmap = {
+    'Varchar': 'String',
+    'Text': 'String',
+    'Tinyint': 'Integer',
+    'Timestamp': 'DateTime',
+    'Datetime': 'DateTime',
+}
+
+USE_MYSQL_TYPES = True
+mysqltypes = ['BIGINT', 'BINARY', 'BIT', 'BLOB', 'BOOLEAN', 'CHAR', 'DATE', 'DATETIME', 'DECIMAL', 'DECIMAL', 'DOUBLE', 'ENUM', 'FLOAT', 'INTEGER', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB', 'MEDIUMINT', 'MEDIUMTEXT', 'NCHAR', 'NUMERIC', 'NVARCHAR', 'REAL', 'SET', 'SMALLINT', 'TEXT', 'TIME', 'TIMESTAMP', 'TINYBLOB', 'TINYINT', 'TINYTEXT', 'VARBINARY', 'VARCHAR', 'YEAR']
 
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
@@ -19,14 +37,29 @@ def singular( name ):
     return name
 
 def getType( column ):
-    type = camelize( column.formattedType.lower() )
-    for o, n in (('Varchar', 'String'), ('Int', 'Integer'), ('Tinyint', 'MySQLTinyint'), ('Text', 'MySQLText'), ('Timestamp', 'Datetime')):
-        type = type.replace(o,n)
-    type = re.sub(r"Integer\([^\)]\)", "Integer", type)
-    if 'UNSIGNED' in column.flags:
-        if type == 'Integer':
-            type = "MySQLInteger(unsigned=True)"
-    return type
+    column_type = column.formattedType
+    column_type = re.match(r'(?P<type>[^\(\)]+)(\((?P<size>[^\(\)]+)\))?', column_type).groupdict()
+    column_type, size = (column_type['type'], column_type['size'])
+    column_type = typesmap.get(column_type.upper(), column_type).upper()
+
+    if USE_MYSQL_TYPES and column_type in mysqltypes:
+        # case of mysql types
+        column_type = column_type.upper()
+        if column_type not in types['mysql']: types['mysql'].append(column_type)
+
+        if 'UNSIGNED' in column.flags and 'INT' in column_type:
+            column_type = '%s(unsigned=True)' % column_type
+
+    else:
+        # sqlalchemy types
+        column_type = camelize( column_type.lower() )
+        column_type = sqlalchemy_typesmap.get(column_type, column_type)
+        if column_type not in types['sqla']: types['sqla'].append(column_type)
+
+    if size and 'INT' not in column_type.upper():
+        column_type = '%s(%s)' % (column_type, size)
+
+    return column_type
 
 def exportTable( table ):
     export = []
@@ -140,21 +173,23 @@ export.append('For more details please check here:')
 export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
 export.append('"""')
 
+tables = []
+for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
+    print " -> Working on %s" % table.name
+    tables.extend( exportTable(table) )
+
 export.append("")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
-export.append("from sqlalchemy import Integer, String, Date, DateTime as Datetime, Float")
-export.append("from sqlalchemy.dialects.mysql import INTEGER as MySQLInteger")
-export.append("from sqlalchemy.dialects.mysql import TINYINT as MySQLTinyint")
-export.append("from sqlalchemy.dialects.mysql import TEXT as MySQLText")
+if len(types['sqla']): export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
+if len(types['mysql']): export.append("from sqlalchemy.dialects.mysql import %s" % ', '.join(types['mysql']))
 export.append("from sqlalchemy.ext.declarative import declarative_base")
 export.append("")
 export.append("Base = declarative_base()")
 export.append("")
 
-for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
-    print " -> Working on %s" % table.name
-    export.extend( exportTable(table) )
+export.extend(tables)
+
 
 grt.modules.Workbench.copyToClipboard('\n'.join(export))
 print "Copied to clipboard"
