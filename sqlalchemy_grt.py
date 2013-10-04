@@ -1,6 +1,6 @@
 import re
 
-version = '0.7'
+version = '0.7.1'
 
 types = {
     'sqla': [],
@@ -144,14 +144,10 @@ def exportTable( table ):
         export.append("  %s = Column( %s )" % (column_name, ', '.join(column_options)))
 
     export.append("")
-    for k, v in foreignKeys.items():
+    for column_name, v in foreignKeys.items():
         fkcol, fktable, ondelete, onupdate = v
         attr = singular(fktable)
         attr = attr[0].lower() + attr[1:]
-
-        # let's revert the aliases first
-        aliases = dict(zip(aliases.values(), aliases.keys()))
-        column_name = aliases.get(k,k)
 
         if 'norelations' in table.comment:
             export.append('  # relationship %s ignored globally on the table' % attr)
@@ -163,6 +159,7 @@ def exportTable( table ):
         
         backref = camelize(table.name)
         backref = backref[0].lower() + backref[1:]
+        column_name = aliases.get(column_name, column_name)
         export.append('  %s = relationship( "%s", foreign_keys=[%s], backref="%s" )' % (attr, singular(fktable), column_name, backref))
 
 
