@@ -1,6 +1,6 @@
 import re
 
-version = '0.4'
+version = '0.5'
 
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
@@ -8,6 +8,8 @@ def camelize( name ):
 def singular( name ):
     if name.endswith('ices'):
         name = name[:-4] + 'ex'
+    if name.endswith('xes'):
+        name = name[:-3] + 'x'
     if name.endswith('ies'):
         name = name[:-3] + 'y'
     if name.endswith('ses'):
@@ -18,7 +20,7 @@ def singular( name ):
 
 def getType( column ):
     type = camelize( column.formattedType.lower() )
-    for o, n in (('Varchar', 'String'), ('Int', 'Integer'), ('Tinyint', 'MySQLTinyint'), ('Text', 'MySQLText')):
+    for o, n in (('Varchar', 'String'), ('Int', 'Integer'), ('Tinyint', 'MySQLTinyint'), ('Text', 'MySQLText'), ('Timestamp', 'Datetime')):
         type = type.replace(o,n)
     type = re.sub(r"Integer\([^\)]\)", "Integer", type)
     if 'UNSIGNED' in column.flags:
