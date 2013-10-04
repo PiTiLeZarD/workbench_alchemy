@@ -1,6 +1,6 @@
 import re
 
-version = '0.6'
+version = '0.7'
 
 types = {
     'sqla': [],
@@ -62,6 +62,12 @@ def getType( column ):
     return column_type
 
 def exportTable( table ):
+    # yeah I know... but I can't prevent myself...
+    # this is to convert all column's comments from opt1=value1,opt2=value2
+    # to a dict like {column_name: {opt1:value1, opt2:value2} ...}
+    options = dict([(c.name, dict([t.split('=') for t in (c.comment or '').split(',') if '=' in t])) for c in table.columns])
+
+    classname = singular( camelize( table.name ) )
     export = []
     primary = []
     indices = []
@@ -79,7 +85,9 @@ def exportTable( table ):
     foreignKeys = {}
     for fk in table.foreignKeys:
         if len(fk.referencedColumns) > 1:
+            # I don't even think that sqlalchemy handles multi column foreign keys...
             continue
+
         for i in range(0, len(fk.referencedColumns)):
             relation = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
             fktable = camelize(fk.referencedColumns[i].owner.name)
@@ -90,7 +98,6 @@ def exportTable( table ):
                 onupdate = fk.updateRule
             foreignKeys[fk.columns[i].name] = (relation, fktable, ondelete, onupdate)
 
-    classname = singular( camelize( table.name ) )
 
     export.append("class %s(Base):" % classname)
     export.append("  __tablename__ = '%s'" % table.name)
@@ -102,37 +109,39 @@ def exportTable( table ):
         column_alias = ''
         column_type = getType(column)
 
-        options = []
+        if 'alias' in options[column_name]:
+            aliases[column_name] = options[column_name]['alias']
+
+        column_options = []
+        column_options.append(column_type)
+
         if column.name in foreignKeys:
             fkcol, fktable, ondelete, onupdate = foreignKeys[column.name]
             fkopts = []
             if ondelete: fkopts.append('ondelete="%s"' % ondelete)
             if onupdate: fkopts.append('onupdate="%s"' % onupdate)
             fkopts = len(fkopts) and ', ' + ', '.join(fkopts) or ''
-            options.append('ForeignKey("%s"%s)' % (fkcol, fkopts))
+            column_options.append('ForeignKey("%s"%s)' % (fkcol, fkopts))
         if column.isNotNull == 1:
-            options.append('nullable=False')
+            column_options.append('nullable=False')
         if column.autoIncrement == 1:
-            options.append('autoincrement=True')
+            column_options.append('autoincrement=True')
         if column.name in primary:
-            options.append('primary_key=True')
-            if (len(primary) == 1) and (column_name != 'id'):
+            column_options.append('primary_key=True')
+            if (len(primary) == 1) and (column_name != 'id') and (column_name not in aliases):
                 aliases[column_name] = 'id'
-                column_alias = '"%s", ' % column_name
-                column_name = 'id'
             elif column.autoIncrement != 1:
-                options.append('autoincrement=False')
+                column_options.append('autoincrement=False')
         if column.name in indices:
-            options.append('index=True')
+            column_options.append('index=True')
         if column.name in unique:
-            options.append('unique=True')
+            column_options.append('unique=True')
 
-        if len(options):
-            options = ', ' + ', '.join(options)
-        else:
-            options = ''
+        if column_name in aliases:
+            column_options = ['"%s"' % column_name] + column_options
+            column_name = aliases[column_name]
 
-        export.append("  %s = Column( %s%s%s )" % (column_name, column_alias, column_type, options))
+        export.append("  %s = Column( %s )" % (column_name, ', '.join(column_options)))
 
     export.append("")
     for k, v in foreignKeys.items():
@@ -140,13 +149,21 @@ def exportTable( table ):
         attr = singular(fktable)
         attr = attr[0].lower() + attr[1:]
 
+        # let's revert the aliases first
+        aliases = dict(zip(aliases.values(), aliases.keys()))
+        column_name = aliases.get(k,k)
+
         if 'norelations' in table.comment:
-            export.append('  # relationship %s ignored' % attr)
+            export.append('  # relationship %s ignored globally on the table' % attr)
+            continue
+        
+        if options[column_name].get('relation', True) == 'False':
+            export.append('  # relationship %s ignored by column' % attr)
             continue
         
         backref = camelize(table.name)
         backref = backref[0].lower() + backref[1:]
-        export.append('  %s = relationship( "%s", foreign_keys=[%s], backref="%s" )' % (attr, singular(fktable), aliases.get(k,k), backref))
+        export.append('  %s = relationship( "%s", foreign_keys=[%s], backref="%s" )' % (attr, singular(fktable), column_name, backref))
 
 
     export.append("")
@@ -155,8 +172,10 @@ def exportTable( table ):
 
     export.append("")
 
+    # take all column you say or by default the primary ones (unless specified otherwise)
+    toprint = [aliases.get(c, c) for c in [p for p, o in options.items() if o.get('toprint', str(p in primary and options[p].get('toprint', True) != 'False')) == 'True']]
     export.append('  def __str__( self ):')
-    export.append("    return '<"+classname+" "+ ' '.join(['%('+i+')s' for i in primary]) +">' % self.__dict__")
+    export.append("    return '<"+classname+" "+ ' '.join(['%('+i+')s' for i in toprint]) +">' % self.__dict__")
 
     export.append("")
     
