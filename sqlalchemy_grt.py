@@ -1,6 +1,6 @@
 import re
 
-version = '0.7.1'
+version = '0.8'
 
 types = {
     'sqla': [],
@@ -23,10 +23,13 @@ mysqltypes = ['BIGINT', 'BINARY', 'BIT', 'BLOB', 'BOOLEAN', 'CHAR', 'DATE', 'DAT
 def camelize( name ):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
 
+def endsWith( name, all ):
+    name = name.lower()
+
 def singular( name ):
-    if name.endswith('ices'):
+    if endsWith(name, ('indices',)):
         name = name[:-4] + 'ex'
-    if name.endswith('xes'):
+    if endsWith(name, ('suffixes',)):
         name = name[:-3] + 'x'
     if name.endswith('ies'):
         name = name[:-3] + 'y'
@@ -146,21 +149,32 @@ def exportTable( table ):
     export.append("")
     for column_name, v in foreignKeys.items():
         fkcol, fktable, ondelete, onupdate = v
-        attr = singular(fktable)
-        attr = attr[0].lower() + attr[1:]
+
+        fkname = singular(fktable)
+        fkname = fkname[0].lower() + fkname[1:]
+        if options[column_name].get('fkname', None) is not None:
+            fkname = options[column_name].get('fkname', None)
 
         if 'norelations' in table.comment:
-            export.append('  # relationship %s ignored globally on the table' % attr)
+            export.append('  # relationship %s ignored globally on the table' % fkname)
             continue
         
         if options[column_name].get('relation', True) == 'False':
-            export.append('  # relationship %s ignored by column' % attr)
+            export.append('  # relationship %s ignored by column' % fkname)
             continue
         
-        backref = camelize(table.name)
-        backref = backref[0].lower() + backref[1:]
+        backref = ''
+        if options[column_name].get('backref', True) != 'False':
+            if options[column_name].get('backrefname', None) is not None:
+                backref = options[column_name].get('backrefname', None)
+            else:
+                backref = camelize(table.name)
+                backref = backref[0].lower() + backref[1:]
+
+            backref = ', backref="%s"' % backref
+
         column_name = aliases.get(column_name, column_name)
-        export.append('  %s = relationship( "%s", foreign_keys=[%s], backref="%s" )' % (attr, singular(fktable), column_name, backref))
+        export.append('  %s = relationship( "%s", foreign_keys=[%s]%s )' % (fkname, singular(fktable), column_name, backref))
 
 
     export.append("")
