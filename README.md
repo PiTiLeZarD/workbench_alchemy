@@ -3,6 +3,18 @@ workbench_alchemy
 
 SQLAlchemy model creation for MySQL Workbench
 
+If you want to use it as a design software and your DB is not mysql, you can disable the use of MySQL specific types by changing:
+
+```
+USE_MYSQL_TYPES = True
+```
+
+to
+
+```
+USE_MYSQL_TYPES = False
+```
+
 ### Want to see?
 
 This:
