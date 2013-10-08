@@ -1,10 +1,11 @@
 import re
 
-version = '0.8'
+version = '0.9'
 
 types = {
     'sqla': [],
-    'mysql': []
+    'sqla_alt': [],
+    'mysql': [],
 }
 typesmap = {
     'INT': 'INTEGER',
@@ -25,6 +26,9 @@ def camelize( name ):
 
 def endsWith( name, all ):
     name = name.lower()
+    for i in all:
+        if name.endswith(i): return True
+    return False
 
 def singular( name ):
     if endsWith(name, ('indices',)):
@@ -48,7 +52,12 @@ def getType( column ):
     if USE_MYSQL_TYPES and column_type in mysqltypes:
         # case of mysql types
         column_type = column_type.upper()
-        if column_type not in types['mysql']: types['mysql'].append(column_type)
+        if column_type not in types['mysql']: 
+            types['mysql'].append(column_type)
+            
+            sqla = camelize( column_type.lower() )
+            sqla = sqlalchemy_typesmap.get(sqla, sqla)
+            types['sqla_alt'].append("%s as %s" % (sqla, column_type))
 
         if 'UNSIGNED' in column.flags and 'INT' in column_type:
             column_type = '%s(unsigned=True)' % column_type
@@ -65,25 +74,23 @@ def getType( column ):
     return column_type
 
 def exportTable( table ):
+    export = []
+
     # yeah I know... but I can't prevent myself...
     # this is to convert all column's comments from opt1=value1,opt2=value2
     # to a dict like {column_name: {opt1:value1, opt2:value2} ...}
     options = dict([(c.name, dict([t.split('=') for t in (c.comment or '').split(',') if '=' in t])) for c in table.columns])
 
     classname = singular( camelize( table.name ) )
-    export = []
-    primary = []
-    indices = []
-    unique = []
+    indices = {'PRIMARY':[], 'INDEX':[], 'UNIQUE':[]}
 
     for index in table.indices:
-        for column in index.columns:
-            if index.indexType == 'PRIMARY':
-                primary.append(column.referencedColumn.name)
-            if index.indexType == 'UNIQUE':
-                unique.append(column.referencedColumn.name)
-            if index.indexType == 'INDEX':
-                indices.append(column.referencedColumn.name)
+        if index.indexType == 'PRIMARY':
+            indices['PRIMARY'] += [c.referencedColumn.name for c in index.columns]
+        if index.indexType == 'INDEX':
+            indices['INDEX'] += [c.referencedColumn.name for c in index.columns]
+        if index.indexType == 'UNIQUE':
+            indices['UNIQUE'] += [(index.name, [c.referencedColumn.name for c in index.columns])]
 
     foreignKeys = {}
     for fk in table.foreignKeys:
@@ -129,15 +136,15 @@ def exportTable( table ):
             column_options.append('nullable=False')
         if column.autoIncrement == 1:
             column_options.append('autoincrement=True')
-        if column.name in primary:
+        if column.name in indices['PRIMARY']:
             column_options.append('primary_key=True')
-            if (len(primary) == 1) and (column_name != 'id') and (column_name not in aliases):
+            if (len(indices['PRIMARY']) == 1) and (column_name != 'id') and (column_name not in aliases):
                 aliases[column_name] = 'id'
             elif column.autoIncrement != 1:
                 column_options.append('autoincrement=False')
-        if column.name in indices:
+        if column.name in indices['INDEX']:
             column_options.append('index=True')
-        if column.name in unique:
+        if column.name in [i[1][0] for i in indices['UNIQUE'] if len(i[1]) == 1]:
             column_options.append('unique=True')
 
         if column_name in aliases:
@@ -145,6 +152,12 @@ def exportTable( table ):
             column_name = aliases[column_name]
 
         export.append("  %s = Column( %s )" % (column_name, ', '.join(column_options)))
+
+    uniques_multi = [i for i in indices['UNIQUE'] if len(i[1]) > 1]
+    if len(uniques_multi):
+        export.append("")
+        for index_name, columns in uniques_multi:
+            export.append("  UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
 
     export.append("")
     for column_name, v in foreignKeys.items():
@@ -184,7 +197,7 @@ def exportTable( table ):
     export.append("")
 
     # take all column you say or by default the primary ones (unless specified otherwise)
-    toprint = [aliases.get(c, c) for c in [p for p, o in options.items() if o.get('toprint', str(p in primary and options[p].get('toprint', True) != 'False')) == 'True']]
+    toprint = [aliases.get(c, c) for c in [p for p, o in options.items() if o.get('toprint', str(p in indices['PRIMARY'] and options[p].get('toprint', True) != 'False')) == 'True']]
     export.append('  def __str__( self ):')
     export.append("    return '<"+classname+" "+ ' '.join(['%('+i+')s' for i in toprint]) +">' % self.__dict__")
 
@@ -211,8 +224,10 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
 export.append("")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
-if len(types['sqla']): export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
+export.append("from sqlalchemy.schema import UniqueConstraint")
 if len(types['mysql']): export.append("from sqlalchemy.dialects.mysql import %s" % ', '.join(types['mysql']))
+if len(types['sqla']): export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
+if len(types['sqla_alt']): export.append("#from sqlalchemy import %s" % ', '.join(types['sqla_alt']))
 export.append("from sqlalchemy.ext.declarative import declarative_base")
 export.append("")
 export.append("Base = declarative_base()")
