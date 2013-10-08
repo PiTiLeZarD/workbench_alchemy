@@ -1,6 +1,6 @@
 import re
 
-version = '0.9'
+version = '0.9.1'
 
 types = {
     'sqla': [],
@@ -216,6 +216,14 @@ export.append('For more details please check here:')
 export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
 export.append('"""')
 
+export.append("")
+export.append("USE_MYSQL_TYPES = %s" % USE_MYSQL_TYPES)
+export.append("try:")
+export.append("  from . import USE_MYSQL_TYPES")
+export.append("except:")
+export.append("  pass")
+export.append("")
+
 tables = []
 for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     print " -> Working on %s" % table.name
@@ -225,10 +233,13 @@ export.append("")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
 export.append("from sqlalchemy.schema import UniqueConstraint")
-if len(types['mysql']): export.append("from sqlalchemy.dialects.mysql import %s" % ', '.join(types['mysql']))
-if len(types['sqla']): export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
-if len(types['sqla_alt']): export.append("#from sqlalchemy import %s" % ', '.join(types['sqla_alt']))
 export.append("from sqlalchemy.ext.declarative import declarative_base")
+if len(types['sqla']): export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
+export.append("")
+export.append("if USE_MYSQL_TYPES:")
+if len(types['mysql']): export.append("  from sqlalchemy.dialects.mysql import %s" % ', '.join(types['mysql']))
+export.append("else:")
+if len(types['sqla_alt']): export.append("  from sqlalchemy import %s" % ', '.join(types['sqla_alt']))
 export.append("")
 export.append("Base = declarative_base()")
 export.append("")
