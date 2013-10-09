@@ -1,6 +1,6 @@
 import re
 
-version = '0.9.1'
+version = '0.9.2'
 
 types = {
     'sqla': [],
@@ -16,6 +16,7 @@ sqlalchemy_typesmap = {
     'Tinyint': 'Integer',
     'Timestamp': 'DateTime',
     'Datetime': 'DateTime',
+    'Double': 'Float',
 }
 
 USE_MYSQL_TYPES = True
@@ -33,12 +34,12 @@ def endsWith( name, all ):
 def singular( name ):
     if endsWith(name, ('indices',)):
         name = name[:-4] + 'ex'
-    if endsWith(name, ('suffixes',)):
+    elif endsWith(name, ('suffixes',)):
         name = name[:-3] + 'x'
-    if name.endswith('ies'):
-        name = name[:-3] + 'y'
-    if name.endswith('ses'):
+    elif endsWith(name, ('aliases',)):
         name = name[:-2]
+    elif name.endswith('ies'):
+        name = name[:-3] + 'y'
     elif name.endswith('s'):
         name = name[:-1]
     return name
