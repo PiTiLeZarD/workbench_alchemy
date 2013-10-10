@@ -108,6 +108,7 @@ optname=optvalue,optname=optvalue...
 #### Option on the table
 
  * norelations will disable all relations for this table (should update that to relations=False)
+ * abstract will create a tablename-less abstract class
 
 #### Option on the fields
 

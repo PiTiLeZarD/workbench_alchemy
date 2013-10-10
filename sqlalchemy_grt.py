@@ -1,6 +1,6 @@
 import re
 
-version = '0.9.2'
+version = '0.10'
 
 types = {
     'sqla': [],
@@ -109,10 +109,13 @@ def exportTable( table ):
                 onupdate = fk.updateRule
             foreignKeys[fk.columns[i].name] = (relation, fktable, ondelete, onupdate)
 
-
-    export.append("class %s(Base):" % classname)
-    export.append("  __tablename__ = '%s'" % table.name)
-    export.append("  ")
+    inherits = 'Base'
+    if 'abstract' in table.comment:
+        inherits = 'AbstractConcreteBase, ' + inherits
+    export.append("class %s(%s):" % (classname, inherits))
+    if 'abstract' not in table.comment:
+        export.append("  __tablename__ = '%s'" % table.name)
+        export.append("  ")
 
     aliases = {}
     for column in table.columns:
@@ -234,7 +237,7 @@ export.append("")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
 export.append("from sqlalchemy.schema import UniqueConstraint")
-export.append("from sqlalchemy.ext.declarative import declarative_base")
+export.append("from sqlalchemy.ext.declarative import declarative_base, AbstractConcreteBase")
 if len(types['sqla']): export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
 export.append("")
 export.append("if USE_MYSQL_TYPES:")
