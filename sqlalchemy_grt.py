@@ -1,6 +1,6 @@
 import re
 
-version = '0.10.2'
+version = '0.10.3'
 
 types = {
     'sqla': [],
@@ -43,7 +43,7 @@ def singular(name):
         name = name[:-4] + 'ex'
     elif endsWith(name, ('suffixes',)):
         name = name[:-3] + 'x'
-    elif endsWith(name, ('aliases',)):
+    elif endsWith(name, ('aliases', 'dresses')):
         name = name[:-2]
     elif name.endswith('ies'):
         name = name[:-3] + 'y'
