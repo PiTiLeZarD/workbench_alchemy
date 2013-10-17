@@ -15,6 +15,12 @@ to
 USE_MYSQL_TYPES = False
 ```
 
+### How to execute example.mwb file?
+- Open MYSQL Workbench;
+- Find & Open `example.mwb`;
+- In Menubar, choose `Scripting`->`Run Workbench Script File`(`⇧+⌘+R` in os x)
+- Select `sqlalchemy_grt.py` and done.
+
 ### Want to see?
 
 This:
