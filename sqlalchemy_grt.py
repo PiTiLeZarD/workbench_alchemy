@@ -1,6 +1,6 @@
 import re
 
-version = '0.10.3'
+version = '0.10.4'
 
 types = {
     'sqla': [],
@@ -126,7 +126,11 @@ def exportTable(table):
     export.append("class %s(%s):" % (classname, inherits))
     if 'abstract' not in table.comment:
         export.append("    __tablename__ = '%s'" % table.name)
-        export.append("")
+
+    if sum([column.autoIncrement for column in table.columns]) > 0:
+        export.append("    __table_args__ = {'sqlite_autoincrement': True}")
+
+    export.append("")
 
     aliases = {}
     for column in table.columns:
