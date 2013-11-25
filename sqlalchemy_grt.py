@@ -1,6 +1,6 @@
 import re
 
-version = '0.10.4'
+version = '0.11.1'
 
 types = {
     'sqla': [],
@@ -127,8 +127,16 @@ def exportTable(table):
     if 'abstract' not in table.comment:
         export.append("    __tablename__ = '%s'" % table.name)
 
+    table_args = {}
+    if table.tableEngine:
+        table_args['mysql_engine'] = table.tableEngine
+    
+    charset = table.defaultCharacterSetName or table.owner.defaultCharacterSetName
+    if charset:
+        table_args['mysql_charset'] = charset
     if sum([column.autoIncrement for column in table.columns]) > 0:
-        export.append("    __table_args__ = {'sqlite_autoincrement': True}")
+        table_args['sqlite_autoincrement'] = True
+    export.append("    __table_args__ = %s" % table_args)
 
     export.append("")
 
@@ -206,6 +214,8 @@ def exportTable(table):
                 backref = backref[0].lower() + backref[1:]
 
             backref = ', backref="%s"' % backref
+            if options[column_name].get('remote_side', None):
+                backref += ', remote_side=[%s]' % options[column_name]['remote_side']
 
         column_name = aliases.get(column_name, column_name)
         export.append('    %s = relationship("%s", foreign_keys=[%s]%s)' % (fkname, singular(fktable), column_name, backref))
