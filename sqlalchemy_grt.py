@@ -1,6 +1,6 @@
 import re
 
-version = '0.11.1'
+version = '0.11.2'
 
 types = {
     'sqla': [],
@@ -174,6 +174,8 @@ def exportTable(table):
             column_options.append('index=True')
         if column.name in [i[1][0] for i in indices['UNIQUE'] if len(i[1]) == 1]:
             column_options.append('unique=True')
+        if column.defaultValue:
+            column_options.append('default=%s' % column.defaultValue)
 
         if column_name in aliases:
             column_options = ['"%s"' % column_name] + column_options
@@ -259,6 +261,8 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     print " -> Working on %s" % table.name
     tables.extend(exportTable(table))
 
+export.append("")
+export.append("import datetime")
 export.append("")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")

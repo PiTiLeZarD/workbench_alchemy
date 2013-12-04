@@ -138,6 +138,7 @@ optname=optvalue,optname=optvalue...
  * fkname=myName : rename the relationship itself
  * alias=myName : rename the column mapping name (DB keeps whatever the name in the schema is)
  * toprint=True : (or False) controls what's printed when using print str(myObject)
+ * default works as ```default=%s``` which means you can put ```"THIS STUFF"``` as default but also ```datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow```
 
 ## Structure of code
 
