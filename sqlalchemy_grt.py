@@ -1,6 +1,6 @@
 import re
 
-version = '0.11.2'
+version = '0.11.3'
 
 types = {
     'sqla': [],
@@ -17,6 +17,7 @@ sqlalchemy_typesmap = {
     'Timestamp': 'DateTime',
     'Datetime': 'DateTime',
     'Double': 'Float',
+    'Blob': 'String',
 }
 
 USE_MYSQL_TYPES = True
