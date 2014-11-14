@@ -137,7 +137,19 @@ def exportTable(table):
         table_args['mysql_charset'] = charset
     if sum([column.autoIncrement for column in table.columns]) > 0:
         table_args['sqlite_autoincrement'] = True
-    export.append("    __table_args__ = %s" % table_args)
+
+    uniques_multi = [i for i in indices['UNIQUE'] if len(i[1]) > 1]
+    uniques = []
+    if len(uniques_multi):
+        export.append("")
+        for index_name, columns in uniques_multi:
+            uniques.append("UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
+    
+    _table_args = []
+    _table_args.append(', '.join(uniques))
+    _table_args.append(table_args)
+    _table_args = ', '.join([str(i) for i in _table_args if str(i).strip()])
+    export.append("    __table_args__ = (%s)" % _table_args)
 
     export.append("")
 
@@ -184,11 +196,6 @@ def exportTable(table):
 
         export.append("    %s = Column(%s)" % (column_name, ', '.join(column_options)))
 
-    uniques_multi = [i for i in indices['UNIQUE'] if len(i[1]) > 1]
-    if len(uniques_multi):
-        export.append("")
-        for index_name, columns in uniques_multi:
-            export.append("    UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
 
     if len(foreignKeys.items()):
         export.append("")
