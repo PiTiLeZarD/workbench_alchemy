@@ -1,6 +1,12 @@
+# -*- coding: utf-8 -*-
+# MySQL Workbench Python script
+# <description>
+# Written in MySQL Workbench 6.2.3
+
+import grt
 import re
 
-version = '0.11.3'
+version = '0.12'
 
 types = {
     'sqla': [],
@@ -22,9 +28,11 @@ sqlalchemy_typesmap = {
 
 USE_MYSQL_TYPES = True
 mysqltypes = [
-    'BIGINT', 'BINARY', 'BIT', 'BLOB', 'BOOLEAN', 'CHAR', 'DATE', 'DATETIME', 'DECIMAL', 'DECIMAL', 'DOUBLE', 'ENUM', 'FLOAT', 'INTEGER',
-    'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB', 'MEDIUMINT', 'MEDIUMTEXT', 'NCHAR', 'NUMERIC', 'NVARCHAR', 'REAL', 'SET', 'SMALLINT', 'TEXT',
-    'TIME', 'TIMESTAMP', 'TINYBLOB', 'TINYINT', 'TINYTEXT', 'VARBINARY', 'VARCHAR', 'YEAR']
+    'BIGINT', 'BINARY', 'BIT', 'BLOB', 'BOOLEAN', 'CHAR', 'DATE', 'DATETIME', 'DECIMAL',
+    'DECIMAL', 'DOUBLE', 'ENUM', 'FLOAT', 'INTEGER', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB',
+    'MEDIUMINT', 'MEDIUMTEXT', 'NCHAR', 'NUMERIC', 'NVARCHAR', 'REAL', 'SET', 'SMALLINT',
+    'TEXT', 'TIME', 'TIMESTAMP', 'TINYBLOB', 'TINYINT', 'TINYTEXT', 'VARBINARY', 'VARCHAR',
+    'YEAR']
 
 
 def camelize(name):
@@ -91,7 +99,11 @@ def exportTable(table):
     # yeah I know... but I can't prevent myself...
     # this is to convert all column's comments from opt1=value1,opt2=value2
     # to a dict like {column_name: {opt1:value1, opt2:value2} ...}
-    options = dict([(c.name, dict([t.split('=') for t in (c.comment or '').split(',') if '=' in t])) for c in table.columns])
+    options = dict([
+        (c.name,
+         dict([t.split('=') for t in (c.comment or '').split(',') if '=' in t])
+         ) for c in table.columns
+    ])
 
     classname = singular(camelize(table.name))
     indices = {'PRIMARY': [], 'INDEX': [], 'UNIQUE': []}
@@ -120,7 +132,7 @@ def exportTable(table):
                 onupdate = fk.updateRule
             foreignKeys[fk.columns[i].name] = (relation, fktable, ondelete, onupdate)
 
-    inherits = 'Base'
+    inherits = 'DECLARATIVE_BASE'
     if 'abstract' in table.comment:
         inherits = 'object'
     export.append("")
@@ -131,7 +143,7 @@ def exportTable(table):
     table_args = {}
     if table.tableEngine:
         table_args['mysql_engine'] = table.tableEngine
-    
+
     charset = table.defaultCharacterSetName or table.owner.defaultCharacterSetName
     if charset:
         table_args['mysql_charset'] = charset
@@ -144,7 +156,7 @@ def exportTable(table):
         export.append("")
         for index_name, columns in uniques_multi:
             uniques.append("UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
-    
+
     _table_args = []
     _table_args.append(', '.join(uniques))
     _table_args.append(table_args)
@@ -194,8 +206,11 @@ def exportTable(table):
             column_options = ['"%s"' % column_name] + column_options
             column_name = aliases[column_name]
 
-        export.append("    %s = Column(%s)" % (column_name, ', '.join(column_options)))
-
+        if column_name == 'id':
+            export.append("    %s = Column(  # pylint: disable=invalid-name\n        %s)" %
+                          (column_name, ', '.join(column_options)))
+        else:
+            export.append("    %s = Column(%s)" % (column_name, ', '.join(column_options)))
 
     if len(foreignKeys.items()):
         export.append("")
@@ -228,7 +243,8 @@ def exportTable(table):
                 backref += ', remote_side=[%s]' % options[column_name]['remote_side']
 
         column_name = aliases.get(column_name, column_name)
-        export.append('    %s = relationship("%s", foreign_keys=[%s]%s)' % (fkname, singular(fktable), column_name, backref))
+        export.append('    %s = relationship("%s", foreign_keys=[%s]%s)' % (
+            fkname, singular(fktable), column_name, backref))
 
     export.append("")
     export.append('    def __repr__(self):')
@@ -237,9 +253,13 @@ def exportTable(table):
     export.append("")
 
     # take all column you say or by default the primary ones (unless specified otherwise)
-    toprint = [aliases.get(c, c) for c in [p for p, o in options.items() if o.get('toprint', str(p in indices['PRIMARY'] and options[p].get('toprint', True) != 'False')) == 'True']]
+    toprint = [aliases.get(c, c) for c in [
+        p for p, o in options.items()
+        if o.get('toprint', str(p in indices['PRIMARY'] and options[p].get('toprint', True) != 'False')) == 'True']
+    ]
     export.append('    def __str__(self):')
-    export.append("        return '<" + classname + " " + ' '.join(['%(' + i + ')s' for i in toprint]) + ">' % self.__dict__")
+    export.append("        return '<" + classname + " " +
+                  ' '.join(['%(' + i + ')s' for i in toprint]) + ">' % self.__dict__")
 
     export.append("")
 
@@ -270,11 +290,10 @@ for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     tables.extend(exportTable(table))
 
 export.append("")
-export.append("import datetime")
-export.append("")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
-export.append("from sqlalchemy.schema import UniqueConstraint")
+if len([1 for l in tables if 'UniqueConstraint' in l]):
+    export.append("from sqlalchemy.schema import UniqueConstraint")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
 if len(types['sqla']):
     export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
@@ -286,7 +305,7 @@ export.append("else:")
 if len(types['sqla_alt']):
     export.append("    from sqlalchemy import %s" % ', '.join(types['sqla_alt']))
 export.append("")
-export.append("Base = declarative_base()")
+export.append("DECLARATIVE_BASE = declarative_base()")
 export.append("")
 
 export.extend(tables)
