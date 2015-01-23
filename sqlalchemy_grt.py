@@ -100,9 +100,9 @@ def getType(column):
 
 class ColumnObject(object):
 
-    def __init__(self, column, table_object):
+    def __init__(self, column, table_obj):
         self._column = column
-        self.table_object = table_object
+        self.table_obj = table_obj
         self.name = column.name
 
         self.options = {}
@@ -119,33 +119,33 @@ class ColumnObject(object):
         self._setForeignKey()
 
     def _setType(self):
-        self.column_type = getType(column)
+        self.column_type = getType(self._column)
 
     def _setOptions(self):
         if self._column.comment:
             self.options = dict([t.split('=') for t in self._column.comment.split(',') if '=' in t])
 
-        self.name = self.options('alias', self.name)
+        self.name = self.options.get('alias', self.name)
 
     def _setFeatures(self):
         if self._column.isNotNull == 1:
             self.features['nullable'] = False
-        if column.autoIncrement == 1:
+        if self._column.autoIncrement == 1:
             self.features['autoincrement'] = True
 
-        if column.name in indices['PRIMARY']:
-            column_options.append('primary_key=True')
-            if (len(indices['PRIMARY']) == 1) and (column_name != 'id') and (column_name not in aliases):
-                aliases[column_name] = 'id'
-            elif column.autoIncrement != 1:
-                column_options.append('autoincrement=False')
-        if column.name in indices['INDEX']:
-            column_options.append('index=True')
-        if column.name in [i[1][0] for i in indices['UNIQUE'] if len(i[1]) == 1]:
-            column_options.append('unique=True')
+        if self._column.name in self.table_obj.indices['PRIMARY']:
+            self.features['primary_key'] = True
+            if (len(self.table_obj.indices['PRIMARY']) == 1) and self.name != 'id':
+                self.name = 'id'
+            elif self._column.autoIncrement != 1:
+                self.features['autoincrement'] = False
+        if self._column.name in self.table_obj.indices['INDEX']:
+            self.features['index'] = True
+        if self._column.name in [i[1][0] for i in self.table_obj.indices['UNIQUE'] if len(i[1]) == 1]:
+            self.features['unique'] = True
 
-        if column.defaultValue:
-            column_options.append('default=%s' % column.defaultValue)
+        if self._column.defaultValue:
+            self.features['default'] = self._column.defaultValue
 
     def _setForeignKey(self):
         foreign_key = self.table_obj.foreign_keys.get(self._column.name, None)
@@ -162,17 +162,20 @@ class ColumnObject(object):
 
     def __str__(self):
         value = []
-        value.append(TAB + "%s = Column(")
+        value.append(TAB + "%s = Column(" % self.name)
         if self.name == 'id':
             value[0] += '  # pylint: disable=invalid-name'
 
         if self.name != self._column.name:
-            value.append(TAB * 2 + self.name)
+            value.append(TAB * 2 + '"%s"' % self._column.name)
 
         value.append(TAB * 2 + self.column_type)
 
         if self.foreign_key:
             value.append(TAB * 2 + self.foreign_key)
+
+        for item in self.features.items():
+            value.append(TAB * 2 + "%s = %s" % item)
 
         value.append(TAB + ")")
 
@@ -188,7 +191,7 @@ class TableObject(object):
         self.table_args = {}
         self.uniques = {}
         self.options = {}
-        self.indices = {'PRIMARY': [], 'INDEX': [], 'UNIQUE': [], 'UNIQUE_MULTI': {}}
+        self.indices = {'PRIMARY': [], 'INDEX': [], 'UNIQUE': {}, 'UNIQUE_MULTI': {}}
         self.foreign_keys = {}
         self.columns = []
         self.relations = []
@@ -198,6 +201,7 @@ class TableObject(object):
     def build(self):
         self._setTableArgs()
         self._setIndices()
+        self._setUniques()
         self._setForeignKeys()
         self._setColumns()
         self._setRelations()
@@ -210,16 +214,16 @@ class TableObject(object):
         if charset:
             self.table_args['mysql_charset'] = charset
 
-        if sum([column.autoIncrement for column in table.columns]) > 0:
+        if sum([column.autoIncrement for column in self._table.columns]) > 0:
             self.table_args['sqlite_autoincrement'] = True
 
     def _setUniques(self):
         uniques_multi = [i for i in self.indices['UNIQUE'] if len(i[1]) > 1]
         if not len(uniques_multi):
-            return []
+            return
 
         for index_name, columns in uniques_multi:
-            self.uniques[index_name] = columns
+            self.indices['UNIQUE_MULTI'][index_name] = columns
 
     def _setIndices(self):
         for index in self._table.indices:
@@ -264,7 +268,7 @@ class TableObject(object):
         return None
 
     def _setRelations(self):
-        if 'norelations' in table.comment:
+        if 'norelations' in self._table.comment:
             return
 
         for column_name, v in self.foreign_keys.items():
@@ -297,105 +301,32 @@ class TableObject(object):
             value.append(TAB + "__tablename__ = '%s'" % self._table.name)
 
         value.append(TAB + "__table_args__ = (")
-        for index_name, columns in self.indices['UNIQUE_MULTI']:
-            uniques.append(TAB * 2 + "UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
+        for index_name, columns in self.indices['UNIQUE_MULTI'].items():
+            value.append(TAB * 2 + "UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
         value.append(TAB * 2 + "%s" % self.table_args)
         value.append(TAB + ")")
 
         value.extend([str(c) for c in self.columns])
 
         for fkname, fktable, column_name, backrefname, remote_side in self.relations:
-            value.append(TAB + '%s = relationship("' % fkname)
-            value.append(TAB * 2 + singular(fktable))
+            value.append(TAB + '%s = relationship(' % fkname)
+            value.append(TAB * 2 + '"%s"' % singular(fktable))
             value.append(TAB * 2 + 'foreign_keys=[%s]' % column_name)
             if backrefname:
                 value.append(TAB * 2 + 'backref="%s"' % backrefname)
             if remote_side:
                 value.append(TAB * 2 + 'remote_side=[%s]' % remote_side)
 
+            value.append(TAB + ')')
+
         return '\n'.join(value)
 
 
-def exportTable(table):
-    export = []
-
-    # yeah I know... but I can't prevent myself...
-    # this is to convert all column's comments from opt1=value1,opt2=value2
-    # to a dict like {column_name: {opt1:value1, opt2:value2} ...}
-    table = TableObject(table)
-
-    aliases = {}
-    for column in table.columns:
-        pass
-
-    if len(foreignKeys.items()):
-        export.append("")
-
-    export.append("")
-    export.append('    def __repr__(self):')
-    export.append('        return self.__str__()')
-
-    export.append("")
-
-    # take all column you say or by default the primary ones (unless specified otherwise)
-    toprint = [aliases.get(c, c) for c in [
-        p for p, o in options.items()
-        if o.get('toprint', str(p in indices['PRIMARY'] and options[p].get('toprint', True) != 'False')) == 'True']
-    ]
-    export.append('    def __str__(self):')
-    export.append("        return '<" + classname + " " +
-                  ' '.join(['%(' + i + ')s' for i in toprint]) + ">' % self.__dict__")
-
-    export.append("")
-
-    return export
-
-print "-" * 20
-print "-- SQLAlchemy export v%s" % VERSION
-print "-" * 20
-
 export = []
-export.append('"""')
-export.append('This file has been automatically generated with workbench_alchemy v%s' % VERSION)
-export.append('For more details please check here:')
-export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
-export.append('"""')
 
-export.append("")
-export.append("USE_MYSQL_TYPES = %s" % USE_MYSQL_TYPES)
-export.append("try:")
-export.append("    from . import USE_MYSQL_TYPES")
-export.append("except:")
-export.append("    pass")
-export.append("")
-
-tables = []
 for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     print " -> Working on %s" % table.name
-    tables.extend(exportTable(table))
-
-export.append("")
-export.append("from sqlalchemy.orm import relationship")
-export.append("from sqlalchemy import Column, ForeignKey")
-if len([1 for l in tables if 'UniqueConstraint' in l]):
-    export.append("from sqlalchemy.schema import UniqueConstraint")
-export.append("from sqlalchemy.ext.declarative import declarative_base")
-if len(TYPES['sqla']):
-    export.append("from sqlalchemy import %s" % ', '.join(TYPES['sqla']))
-export.append("")
-export.append("if USE_MYSQL_TYPES:")
-if len(TYPES['mysql']):
-    export.append("    from sqlalchemy.dialects.mysql import %s" % ', '.join(TYPES['mysql']))
-export.append("else:")
-if len(TYPES['sqla_alt']):
-    export.append("    from sqlalchemy import %s" % ', '.join(TYPES['sqla_alt']))
-export.append("")
-export.append("DECLARATIVE_BASE = declarative_base()")
-export.append("")
-
-export.extend(tables)
-
+    export.append(str(TableObject(table)))
 
 grt.modules.Workbench.copyToClipboard('\n'.join(export))
 print "Copied to clipboard"
-Copied to clipboard"
