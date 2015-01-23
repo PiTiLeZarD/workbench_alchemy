@@ -6,17 +6,20 @@
 import grt
 import re
 
-version = '0.12'
+VERSION = '0.2'
 
-types = {
+USE_MYSQL_TYPES = True
+TAB = "    "
+
+TYPES = {
     'sqla': [],
     'sqla_alt': [],
     'mysql': [],
 }
-typesmap = {
+TYPESMAP = {
     'INT': 'INTEGER',
 }
-sqlalchemy_typesmap = {
+SQLALCHEMY_TYPESMAP = {
     'Varchar': 'String',
     'Text': 'String',
     'Tinyint': 'Integer',
@@ -25,9 +28,7 @@ sqlalchemy_typesmap = {
     'Double': 'Float',
     'Blob': 'String',
 }
-
-USE_MYSQL_TYPES = True
-mysqltypes = [
+MYSQLTYPES = [
     'BIGINT', 'BINARY', 'BIT', 'BLOB', 'BOOLEAN', 'CHAR', 'DATE', 'DATETIME', 'DECIMAL',
     'DECIMAL', 'DOUBLE', 'ENUM', 'FLOAT', 'INTEGER', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB',
     'MEDIUMINT', 'MEDIUMTEXT', 'NCHAR', 'NUMERIC', 'NVARCHAR', 'REAL', 'SET', 'SMALLINT',
@@ -37,6 +38,10 @@ mysqltypes = [
 
 def camelize(name):
     return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
+
+
+def functionalize(name):
+    return name[0].lower() + camelize(name)[1:]
 
 
 def endsWith(name, all):
@@ -65,27 +70,27 @@ def getType(column):
     column_type = column.formattedType
     column_type = re.match(r'(?P<type>[^\(\)]+)(\((?P<size>[^\(\)]+)\))?', column_type).groupdict()
     column_type, size = (column_type['type'], column_type['size'])
-    column_type = typesmap.get(column_type.upper(), column_type).upper()
+    column_type = TYPESMAP.get(column_type.upper(), column_type).upper()
 
-    if USE_MYSQL_TYPES and column_type in mysqltypes:
-        # case of mysql types
+    if USE_MYSQL_TYPES and column_type in MYSQLTYPES:
+        # case of mysql TYPES
         column_type = column_type.upper()
-        if column_type not in types['mysql']:
-            types['mysql'].append(column_type)
+        if column_type not in TYPES['mysql']:
+            TYPES['mysql'].append(column_type)
 
             sqla = camelize(column_type.lower())
-            sqla = sqlalchemy_typesmap.get(sqla, sqla)
-            types['sqla_alt'].append("%s as %s" % (sqla, column_type))
+            sqla = SQLALCHEMY_TYPESMAP.get(sqla, sqla)
+            TYPES['sqla_alt'].append("%s as %s" % (sqla, column_type))
 
         if 'UNSIGNED' in column.flags and 'INT' in column_type:
             column_type = '%s(unsigned=True)' % column_type
 
     else:
-        # sqlalchemy types
+        # sqlalchemy TYPES
         column_type = camelize(column_type.lower())
-        column_type = sqlalchemy_typesmap.get(column_type, column_type)
-        if column_type not in types['sqla']:
-            types['sqla'].append(column_type)
+        column_type = SQLALCHEMY_TYPESMAP.get(column_type, column_type)
+        if column_type not in TYPES['sqla']:
+            TYPES['sqla'].append(column_type)
 
     if size and 'INT' not in column_type.upper():
         column_type = '%s(%s)' % (column_type, size)
@@ -93,102 +98,41 @@ def getType(column):
     return column_type
 
 
-def exportTable(table):
-    export = []
+class ColumnObject(object):
 
-    # yeah I know... but I can't prevent myself...
-    # this is to convert all column's comments from opt1=value1,opt2=value2
-    # to a dict like {column_name: {opt1:value1, opt2:value2} ...}
-    options = dict([
-        (c.name,
-         dict([t.split('=') for t in (c.comment or '').split(',') if '=' in t])
-         ) for c in table.columns
-    ])
+    def __init__(self, column, table_object):
+        self._column = column
+        self.table_object = table_object
+        self.name = column.name
 
-    classname = singular(camelize(table.name))
-    indices = {'PRIMARY': [], 'INDEX': [], 'UNIQUE': []}
+        self.options = {}
+        self.column_type = None
+        self.features = {}
+        self.foreign_key = None
 
-    for index in table.indices:
-        if index.indexType == 'PRIMARY':
-            indices['PRIMARY'] += [c.referencedColumn.name for c in index.columns]
-        if index.indexType == 'INDEX':
-            indices['INDEX'] += [c.referencedColumn.name for c in index.columns]
-        if index.indexType == 'UNIQUE':
-            indices['UNIQUE'] += [(index.name, [c.referencedColumn.name for c in index.columns])]
+        self.build()
 
-    foreignKeys = {}
-    for fk in table.foreignKeys:
-        if len(fk.referencedColumns) > 1:
-            # I don't even think that sqlalchemy handles multi column foreign keys...
-            continue
+    def build(self):
+        self._setType()
+        self._setOptions()
+        self._setFeatures()
+        self._setForeignKey()
 
-        for i in range(0, len(fk.referencedColumns)):
-            relation = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
-            fktable = camelize(fk.referencedColumns[i].owner.name)
-            ondelete = onupdate = None
-            if fk.deleteRule and fk.deleteRule != "NO ACTION":
-                ondelete = fk.deleteRule
-            if fk.updateRule and fk.updateRule != "NO ACTION":
-                onupdate = fk.updateRule
-            foreignKeys[fk.columns[i].name] = (relation, fktable, ondelete, onupdate)
+    def _setType(self):
+        self.column_type = getType(column)
 
-    inherits = 'DECLARATIVE_BASE'
-    if 'abstract' in table.comment:
-        inherits = 'object'
-    export.append("")
-    export.append("class %s(%s):" % (classname, inherits))
-    if 'abstract' not in table.comment:
-        export.append("    __tablename__ = '%s'" % table.name)
+    def _setOptions(self):
+        if self._column.comment:
+            self.options = dict([t.split('=') for t in self._column.comment.split(',') if '=' in t])
 
-    table_args = {}
-    if table.tableEngine:
-        table_args['mysql_engine'] = table.tableEngine
+        self.name = self.options('alias', self.name)
 
-    charset = table.defaultCharacterSetName or table.owner.defaultCharacterSetName
-    if charset:
-        table_args['mysql_charset'] = charset
-    if sum([column.autoIncrement for column in table.columns]) > 0:
-        table_args['sqlite_autoincrement'] = True
-
-    uniques_multi = [i for i in indices['UNIQUE'] if len(i[1]) > 1]
-    uniques = []
-    if len(uniques_multi):
-        export.append("")
-        for index_name, columns in uniques_multi:
-            uniques.append("UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
-
-    _table_args = []
-    _table_args.append(', '.join(uniques))
-    _table_args.append(table_args)
-    _table_args = ', '.join([str(i) for i in _table_args if str(i).strip()])
-    export.append("    __table_args__ = (%s)" % _table_args)
-
-    export.append("")
-
-    aliases = {}
-    for column in table.columns:
-        column_name = column.name
-        column_type = getType(column)
-
-        if 'alias' in options[column_name]:
-            aliases[column_name] = options[column_name]['alias']
-
-        column_options = []
-        column_options.append(column_type)
-
-        if column.name in foreignKeys:
-            fkcol, fktable, ondelete, onupdate = foreignKeys[column.name]
-            fkopts = []
-            if ondelete:
-                fkopts.append('ondelete="%s"' % ondelete)
-            if onupdate:
-                fkopts.append('onupdate="%s"' % onupdate)
-            fkopts = len(fkopts) and ', ' + ', '.join(fkopts) or ''
-            column_options.append('ForeignKey("%s"%s)' % (fkcol, fkopts))
-        if column.isNotNull == 1:
-            column_options.append('nullable=False')
+    def _setFeatures(self):
+        if self._column.isNotNull == 1:
+            self.features['nullable'] = False
         if column.autoIncrement == 1:
-            column_options.append('autoincrement=True')
+            self.features['autoincrement'] = True
+
         if column.name in indices['PRIMARY']:
             column_options.append('primary_key=True')
             if (len(indices['PRIMARY']) == 1) and (column_name != 'id') and (column_name not in aliases):
@@ -199,52 +143,193 @@ def exportTable(table):
             column_options.append('index=True')
         if column.name in [i[1][0] for i in indices['UNIQUE'] if len(i[1]) == 1]:
             column_options.append('unique=True')
+
         if column.defaultValue:
             column_options.append('default=%s' % column.defaultValue)
 
-        if column_name in aliases:
-            column_options = ['"%s"' % column_name] + column_options
-            column_name = aliases[column_name]
+    def _setForeignKey(self):
+        foreign_key = self.table_obj.foreign_keys.get(self._column.name, None)
+        if foreign_key:
+            fkcol, fktable, ondelete, onupdate = foreign_key
+            fkopts = []
+            if ondelete:
+                fkopts.append('ondelete="%s"' % ondelete)
+            if onupdate:
+                fkopts.append('onupdate="%s"' % onupdate)
+            fkopts = len(fkopts) and ', ' + ', '.join(fkopts) or ''
 
-        if column_name == 'id':
-            export.append("    %s = Column(  # pylint: disable=invalid-name\n        %s)" %
-                          (column_name, ', '.join(column_options)))
-        else:
-            export.append("    %s = Column(%s)" % (column_name, ', '.join(column_options)))
+            self.foreign_key = 'ForeignKey("%s"%s)' % (fkcol, fkopts)
+
+    def __str__(self):
+        value = []
+        value.append(TAB + "%s = Column(")
+        if self.name == 'id':
+            value[0] += '  # pylint: disable=invalid-name'
+
+        if self.name != self._column.name:
+            value.append(TAB * 2 + self.name)
+
+        value.append(TAB * 2 + self.column_type)
+
+        if self.foreign_key:
+            value.append(TAB * 2 + self.foreign_key)
+
+        value.append(TAB + ")")
+
+        return "\n".join(value)
+
+
+class TableObject(object):
+
+    def __init__(self, table):
+        self._table = table
+        self.name = singular(camelize(table.name))
+
+        self.table_args = {}
+        self.uniques = {}
+        self.options = {}
+        self.indices = {'PRIMARY': [], 'INDEX': [], 'UNIQUE': [], 'UNIQUE_MULTI': {}}
+        self.foreign_keys = {}
+        self.columns = []
+        self.relations = []
+
+        self.build()
+
+    def build(self):
+        self._setTableArgs()
+        self._setIndices()
+        self._setForeignKeys()
+        self._setColumns()
+        self._setRelations()
+
+    def _setTableArgs(self):
+        if self._table.tableEngine:
+            self.table_args['mysql_engine'] = self._table.tableEngine
+
+        charset = self._table.defaultCharacterSetName or self._table.owner.defaultCharacterSetName
+        if charset:
+            self.table_args['mysql_charset'] = charset
+
+        if sum([column.autoIncrement for column in table.columns]) > 0:
+            self.table_args['sqlite_autoincrement'] = True
+
+    def _setUniques(self):
+        uniques_multi = [i for i in self.indices['UNIQUE'] if len(i[1]) > 1]
+        if not len(uniques_multi):
+            return []
+
+        for index_name, columns in uniques_multi:
+            self.uniques[index_name] = columns
+
+    def _setIndices(self):
+        for index in self._table.indices:
+            if index.indexType == 'PRIMARY':
+                self.indices['PRIMARY'] += [c.referencedColumn.name for c in index.columns]
+            if index.indexType == 'INDEX':
+                self.indices['INDEX'] += [c.referencedColumn.name for c in index.columns]
+            if index.indexType == 'UNIQUE':
+                if len(index.columns) > 1:
+                    self.indices['UNIQUE_MULTI'][index.name] = [c.referencedColumn.name for c in index.columns]
+                else:
+                    self.indices['UNIQUE'].update(
+                        dict([([c.referencedColumn.name for c in index.columns][0], index.name)])
+                    )
+
+    def _setForeignKeys(self):
+        for fk in self._table.foreignKeys:
+            if len(fk.referencedColumns) > 1:
+                # I don't even think that sqlalchemy handles multi column foreign keys...
+                continue
+
+            for i in range(0, len(fk.referencedColumns)):
+                relation = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
+                fktable = camelize(fk.referencedColumns[i].owner.name)
+                ondelete = onupdate = None
+                if fk.deleteRule and fk.deleteRule != "NO ACTION":
+                    ondelete = fk.deleteRule
+                if fk.updateRule and fk.updateRule != "NO ACTION":
+                    onupdate = fk.updateRule
+                self.foreign_keys[fk.columns[i].name] = (relation, fktable, ondelete, onupdate)
+
+    def _setColumns(self):
+        for column in self._table.columns:
+            self.columns.append(ColumnObject(column, self))
+
+    def getColumn(self, name):
+        for column in self.columns:
+            if column.name == name:
+                return column
+            if column._column.name == name:
+                return column
+        return None
+
+    def _setRelations(self):
+        if 'norelations' in table.comment:
+            return
+
+        for column_name, v in self.foreign_keys.items():
+            column = self.getColumn(column_name)
+            fkcol, fktable, ondelete, onupdate = v
+            fkname = column.options.get('fkname', functionalize(singular(fktable)))
+
+            if column.options.get('relation', True) == 'False':
+                continue
+
+            backrefname = None
+            remote_side = None
+            if column.options.get('backref', True) != 'False':
+                backrefname = column.options.get('backrefname', functionalize(self._table.name))
+                remote_side = column.options.get('remote_side', None)
+
+            self.relations.append((
+                fkname, singular(fktable), column.name, backrefname, remote_side
+            ))
+
+    def __str__(self):
+        value = []
+
+        value.append("class %s(%s):" % (
+            self.name,
+            'object' if 'abstract' in self._table.comment else 'DECLARATIVE_BASE'
+        ))
+        value.append("")
+        if 'abstract' not in self._table.comment:
+            value.append(TAB + "__tablename__ = '%s'" % self._table.name)
+
+        value.append(TAB + "__table_args__ = (")
+        for index_name, columns in self.indices['UNIQUE_MULTI']:
+            uniques.append(TAB * 2 + "UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
+        value.append(TAB * 2 + "%s" % self.table_args)
+        value.append(TAB + ")")
+
+        value.extend([str(c) for c in self.columns])
+
+        for fkname, fktable, column_name, backrefname, remote_side in self.relations:
+            value.append(TAB + '%s = relationship("' % fkname)
+            value.append(TAB * 2 + singular(fktable))
+            value.append(TAB * 2 + 'foreign_keys=[%s]' % column_name)
+            if backrefname:
+                value.append(TAB * 2 + 'backref="%s"' % backrefname)
+            if remote_side:
+                value.append(TAB * 2 + 'remote_side=[%s]' % remote_side)
+
+        return '\n'.join(value)
+
+
+def exportTable(table):
+    export = []
+
+    # yeah I know... but I can't prevent myself...
+    # this is to convert all column's comments from opt1=value1,opt2=value2
+    # to a dict like {column_name: {opt1:value1, opt2:value2} ...}
+    table = TableObject(table)
+
+    aliases = {}
+    for column in table.columns:
+        pass
 
     if len(foreignKeys.items()):
         export.append("")
-    for column_name, v in foreignKeys.items():
-        fkcol, fktable, ondelete, onupdate = v
-
-        fkname = singular(fktable)
-        fkname = fkname[0].lower() + fkname[1:]
-        if options[column_name].get('fkname', None) is not None:
-            fkname = options[column_name].get('fkname', None)
-
-        if 'norelations' in table.comment:
-            export.append('    # relationship %s ignored globally on the table' % fkname)
-            continue
-
-        if options[column_name].get('relation', True) == 'False':
-            export.append('    # relationship %s ignored by column' % fkname)
-            continue
-
-        backref = ''
-        if options[column_name].get('backref', True) != 'False':
-            if options[column_name].get('backrefname', None) is not None:
-                backref = options[column_name].get('backrefname', None)
-            else:
-                backref = camelize(table.name)
-                backref = backref[0].lower() + backref[1:]
-
-            backref = ', backref="%s"' % backref
-            if options[column_name].get('remote_side', None):
-                backref += ', remote_side=[%s]' % options[column_name]['remote_side']
-
-        column_name = aliases.get(column_name, column_name)
-        export.append('    %s = relationship("%s", foreign_keys=[%s]%s)' % (
-            fkname, singular(fktable), column_name, backref))
 
     export.append("")
     export.append('    def __repr__(self):')
@@ -266,12 +351,12 @@ def exportTable(table):
     return export
 
 print "-" * 20
-print "-- SQLAlchemy export v%s" % version
+print "-- SQLAlchemy export v%s" % VERSION
 print "-" * 20
 
 export = []
 export.append('"""')
-export.append('This file has been automatically generated with workbench_alchemy v%s' % version)
+export.append('This file has been automatically generated with workbench_alchemy v%s' % VERSION)
 export.append('For more details please check here:')
 export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
 export.append('"""')
@@ -295,15 +380,15 @@ export.append("from sqlalchemy import Column, ForeignKey")
 if len([1 for l in tables if 'UniqueConstraint' in l]):
     export.append("from sqlalchemy.schema import UniqueConstraint")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
-if len(types['sqla']):
-    export.append("from sqlalchemy import %s" % ', '.join(types['sqla']))
+if len(TYPES['sqla']):
+    export.append("from sqlalchemy import %s" % ', '.join(TYPES['sqla']))
 export.append("")
 export.append("if USE_MYSQL_TYPES:")
-if len(types['mysql']):
-    export.append("    from sqlalchemy.dialects.mysql import %s" % ', '.join(types['mysql']))
+if len(TYPES['mysql']):
+    export.append("    from sqlalchemy.dialects.mysql import %s" % ', '.join(TYPES['mysql']))
 export.append("else:")
-if len(types['sqla_alt']):
-    export.append("    from sqlalchemy import %s" % ', '.join(types['sqla_alt']))
+if len(TYPES['sqla_alt']):
+    export.append("    from sqlalchemy import %s" % ', '.join(TYPES['sqla_alt']))
 export.append("")
 export.append("DECLARATIVE_BASE = declarative_base()")
 export.append("")
@@ -313,3 +398,4 @@ export.extend(tables)
 
 grt.modules.Workbench.copyToClipboard('\n'.join(export))
 print "Copied to clipboard"
+Copied to clipboard"
