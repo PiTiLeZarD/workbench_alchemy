@@ -1,11 +1,10 @@
-workbench_alchemy
-=================
-
-```
 Warning: this project is currently being rebuilt. I originally developped it the messy way discovering the grt api and the need of the 
 company I was working for, now I clean everything, make it more maintainable and I will write tests and all... So if you plan on using 
 be aware that few things might change in the futue, I'll provide more details when it's ready.
-```
+
+
+workbench_alchemy
+=================
 
 SQLAlchemy model creation for MySQL Workbench
 
