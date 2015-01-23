@@ -404,7 +404,8 @@ export.append("")
 export.append("")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
-export.append("from sqlalchemy.schema import UniqueConstraint")
+if len([1 for t in tables if len(t.indices['UNIQUE_MULTI'])]):
+    export.append("from sqlalchemy.schema import UniqueConstraint")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
 if len(TYPES['sqla']):
     export.append("from sqlalchemy import %s" % ', '.join(TYPES['sqla']))
@@ -416,7 +417,7 @@ export.append("else:")
 if len(TYPES['sqla_alt']):
     export.append("    from sqlalchemy import %s" % ', '.join(TYPES['sqla_alt']))
 export.append("")
-export.append("Base = declarative_base()")
+export.append("DECLARATIVE_BASE = declarative_base()")
 export.append("")
 
 for table in tables:
