@@ -44,6 +44,10 @@ def functionalize(name):
     return name[0].lower() + camelize(name)[1:]
 
 
+def quote(s):
+    return '"%s"' % s
+
+
 def endsWith(name, all):
     name = name.lower()
     for i in all:
@@ -64,6 +68,35 @@ def singular(name):
     elif name.endswith('s'):
         name = name[:-1]
     return name
+
+
+class AttributeObject(object):
+    def __init__(self, name, classname):
+        self.name = name
+        self.classname = classname
+        self.pylint_message = None
+        self.args = []
+        self.kwargs = {}
+        self.tab = ''
+
+    def __str__(self):
+        name = "%s = " % self.name if self.name else ''
+        # simple case
+        if not len(self.args) and not len(self.kwargs):
+            return self.tab + "%s%s()%s" % (name, self.classname, self.pylint_message or '')
+
+        # condensed
+        arguments = ", ".join(self.args)
+        if len(self.kwargs):
+            arguments += ', ' + ", ".join(['%s=%s' % item for item in self.kwargs.items()])
+        value = self.tab + "%s%s(%s)%s" % (name, self.classname, arguments, self.pylint_message or '')
+        if len(value) < 120:
+            return value
+
+        # pep8 120 columns
+        # TODO
+
+        return value
 
 
 def getType(column):
@@ -151,35 +184,34 @@ class ColumnObject(object):
         foreign_key = self.table_obj.foreign_keys.get(self._column.name, None)
         if foreign_key:
             fkcol, fktable, ondelete, onupdate = foreign_key
-            fkopts = []
+            attr = AttributeObject(None, 'ForeignKey')
+            attr.tab = TAB
+            attr.args.append(quote(fkcol))
             if ondelete:
-                fkopts.append('ondelete="%s"' % ondelete)
+                attr.kwargs['ondelete'] = quote(ondelete)
             if onupdate:
-                fkopts.append('onupdate="%s"' % onupdate)
-            fkopts = len(fkopts) and ', ' + ', '.join(fkopts) or ''
+                attr.kwargs['onupdate'] = quote(onupdate)
 
-            self.foreign_key = 'ForeignKey("%s"%s)' % (fkcol, fkopts)
+            self.foreign_key = str(attr)
 
     def __str__(self):
-        value = []
-        value.append(TAB + "%s = Column(" % self.name)
+        attr = AttributeObject(self.name, 'Column')
+        attr.tab = TAB
+
         if self.name == 'id':
-            value[0] += '  # pylint: disable=invalid-name'
+            attr.pylint_message = '  # pylint: disable=invalid-name'
 
         if self.name != self._column.name:
-            value.append(TAB * 2 + '"%s"' % self._column.name)
+            attr.args.append(quote(self._column.name))
 
-        value.append(TAB * 2 + self.column_type)
+        attr.args.append(self.column_type)
 
         if self.foreign_key:
-            value.append(TAB * 2 + self.foreign_key)
+            attr.args.append(self.foreign_key)
 
-        for item in self.features.items():
-            value.append(TAB * 2 + "%s = %s" % item)
+        attr.kwargs = self.features
 
-        value.append(TAB + ")")
-
-        return "\n".join(value)
+        return str(attr)
 
 
 class TableObject(object):
@@ -188,6 +220,7 @@ class TableObject(object):
         self._table = table
         self.name = singular(camelize(table.name))
 
+        self.comments = []
         self.table_args = {}
         self.uniques = {}
         self.options = {}
@@ -243,6 +276,7 @@ class TableObject(object):
         for fk in self._table.foreignKeys:
             if len(fk.referencedColumns) > 1:
                 # I don't even think that sqlalchemy handles multi column foreign keys...
+                self.comments.append('multicolumns foreign key ignored')
                 continue
 
             for i in range(0, len(fk.referencedColumns)):
@@ -269,6 +303,7 @@ class TableObject(object):
 
     def _setRelations(self):
         if 'norelations' in self._table.comment:
+            self.comments.append("relations ignored for this table")
             return
 
         for column_name, v in self.foreign_keys.items():
@@ -277,6 +312,7 @@ class TableObject(object):
             fkname = column.options.get('fkname', functionalize(singular(fktable)))
 
             if column.options.get('relation', True) == 'False':
+                self.comments.append("relation <%s> ignored for this table" % fkname)
                 continue
 
             backrefname = None
@@ -296,6 +332,8 @@ class TableObject(object):
             self.name,
             'object' if 'abstract' in self._table.comment else 'DECLARATIVE_BASE'
         ))
+        for comment in self.comments:
+            value.append(TAB + '# %s' % comment)
         value.append("")
         if 'abstract' not in self._table.comment:
             value.append(TAB + "__tablename__ = '%s'" % self._table.name)
@@ -309,15 +347,14 @@ class TableObject(object):
         value.extend([str(c) for c in self.columns])
 
         for fkname, fktable, column_name, backrefname, remote_side in self.relations:
-            value.append(TAB + '%s = relationship(' % fkname)
-            value.append(TAB * 2 + '"%s"' % singular(fktable))
-            value.append(TAB * 2 + 'foreign_keys=[%s]' % column_name)
+            attr = AttributeObject(fkname, 'relationship')
+            attr.args.append(quote(singular(fktable)))
+            attr.kwargs['foreign_keys'] = '[%s]' % column_name
             if backrefname:
-                value.append(TAB * 2 + 'backref="%s"' % backrefname)
+                attr.kwargs['backref'] = quote(backrefname)
             if remote_side:
-                value.append(TAB * 2 + 'remote_side=[%s]' % remote_side)
-
-            value.append(TAB + ')')
+                attr.kwargs['remote_side'] = '[%s]' % remote_side
+            value.append(str(attr))
 
         return '\n'.join(value)
 
