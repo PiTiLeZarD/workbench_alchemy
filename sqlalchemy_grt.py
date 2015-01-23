@@ -185,7 +185,6 @@ class ColumnObject(object):
         if foreign_key:
             fkcol, fktable, ondelete, onupdate = foreign_key
             attr = AttributeObject(None, 'ForeignKey')
-            attr.tab = TAB
             attr.args.append(quote(fkcol))
             if ondelete:
                 attr.kwargs['ondelete'] = quote(ondelete)
@@ -228,6 +227,7 @@ class TableObject(object):
         self.foreign_keys = {}
         self.columns = []
         self.relations = []
+        self.columns_to_print = set()
 
         self.build()
 
@@ -238,6 +238,7 @@ class TableObject(object):
         self._setForeignKeys()
         self._setColumns()
         self._setRelations()
+        self._setColumnsToPrint()
 
     def _setTableArgs(self):
         if self._table.tableEngine:
@@ -325,6 +326,15 @@ class TableObject(object):
                 fkname, singular(fktable), column.name, backrefname, remote_side
             ))
 
+    def _setColumnsToPrint(self):
+        for column in [self.getColumn(name) for name in self.indices['PRIMARY']]:
+            if column.options.get('toprint', False) == 'False':
+                continue
+            self.columns_to_print.add(column.name)
+        for column in self.columns:
+            if column.options.get('toprint', False) == 'True':
+                self.columns_to_print.add(column.name)
+
     def __str__(self):
         value = []
 
@@ -340,14 +350,17 @@ class TableObject(object):
 
         value.append(TAB + "__table_args__ = (")
         for index_name, columns in self.indices['UNIQUE_MULTI'].items():
-            value.append(TAB * 2 + "UniqueConstraint('%s', name='%s')" % ("', '".join(columns), index_name))
+            value.append(TAB * 2 + "UniqueConstraint('%s', name='%s')," % ("', '".join(columns), index_name))
         value.append(TAB * 2 + "%s" % self.table_args)
         value.append(TAB + ")")
 
+        value.append('')
         value.extend([str(c) for c in self.columns])
+        value.append('')
 
         for fkname, fktable, column_name, backrefname, remote_side in self.relations:
             attr = AttributeObject(fkname, 'relationship')
+            attr.tab = TAB
             attr.args.append(quote(singular(fktable)))
             attr.kwargs['foreign_keys'] = '[%s]' % column_name
             if backrefname:
@@ -356,14 +369,63 @@ class TableObject(object):
                 attr.kwargs['remote_side'] = '[%s]' % remote_side
             value.append(str(attr))
 
+        if len(self.relations):
+            value.append('')
+
+        value.append(TAB + 'def __repr__(self):')
+        value.append(TAB * 2 + 'return self.__str__()')
+        value.append(TAB + 'def __str__(self):')
+        attr = AttributeObject(None, self.name)
+        attr.args = ['%%(%s)s' % name for name in self.columns_to_print]
+        value.append(TAB * 2 + 'return "<%s>" %% self.__dict__' % str(attr))
+
         return '\n'.join(value)
 
 
-export = []
-
+tables = []
 for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     print " -> Working on %s" % table.name
-    export.append(str(TableObject(table)))
+    tables.append(TableObject(table))
+
+export = []
+export.append('"""')
+export.append('This file has been automatically generated with workbench_alchemy v%s' % VERSION)
+export.append('For more details please check here:')
+export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
+export.append('"""')
+
+export.append("")
+export.append("USE_MYSQL_TYPES = %s" % USE_MYSQL_TYPES)
+export.append("try:")
+export.append("    from . import USE_MYSQL_TYPES")
+export.append("except:")
+export.append("    pass")
+export.append("")
+export.append("")
+export.append("from sqlalchemy.orm import relationship")
+export.append("from sqlalchemy import Column, ForeignKey")
+export.append("from sqlalchemy.schema import UniqueConstraint")
+export.append("from sqlalchemy.ext.declarative import declarative_base")
+if len(TYPES['sqla']):
+    export.append("from sqlalchemy import %s" % ', '.join(TYPES['sqla']))
+export.append("")
+export.append("if USE_MYSQL_TYPES:")
+if len(TYPES['mysql']):
+    export.append("    from sqlalchemy.dialects.mysql import %s" % ', '.join(TYPES['mysql']))
+export.append("else:")
+if len(TYPES['sqla_alt']):
+    export.append("    from sqlalchemy import %s" % ', '.join(TYPES['sqla_alt']))
+export.append("")
+export.append("Base = declarative_base()")
+export.append("")
+
+for table in tables:
+    export.append("")
+    export.append(str(table))
+    export.append("")
 
 grt.modules.Workbench.copyToClipboard('\n'.join(export))
+print "-" * 20
+print "-- SQLAlchemy export v%s" % VERSION
+print "-" * 20
 print "Copied to clipboard"
