@@ -26,6 +26,26 @@ class TestAttributeObject(unittest.TestCase):
     def test_03(self):
         self.assertEquals('Test()', str(AttributeObject(None, 'Test')))
 
+    def test_04(self):
+        attr = AttributeObject('test', 'Test')
+        attr.tab = '    '
+        attr.args.extend(['"qwertyuiop"', 'asdfghjkl', 'zxcvbnm', 'poiuytrew', 'qwertyui'])
+        attr.pylint_message = '  # pylint-test'
+        attr.kwargs.update({
+            'sdljfsdf': '12',
+            'sldkjfasdf': '"ewuhofnocnwoedsf"',
+            'eoripu': '"ewiu"',
+            'cxmvbxcvmnb': '"sdkjhflknslkfwelcwiemoimcoiwemc"',
+            's230948d': '"ewuhofnocnwoedsf"',
+        })
+        expected = [
+            '    test = Test(  # pylint-test',
+            '        "qwertyuiop", asdfghjkl, zxcvbnm, poiuytrew, qwertyui, sdljfsdf=12, eoripu="ewiu",',
+            '        cxmvbxcvmnb="sdkjhflknslkfwelcwiemoimcoiwemc", sldkjfasdf="ewuhofnocnwoedsf", s230948d="ewuhofnocnwoedsf"',
+            '    )'
+        ]
+        self.assertEquals('\n'.join(expected), str(attr))
+
 
 class TestGetType(unittest.TestCase):
 

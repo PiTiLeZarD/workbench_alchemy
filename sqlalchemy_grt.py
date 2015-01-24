@@ -10,6 +10,7 @@ VERSION = '0.2'
 
 USE_MYSQL_TYPES = True
 TAB = "    "
+PEP8_LIMIT = 120
 
 TYPES = {
     'sqla': [],
@@ -70,6 +71,22 @@ def singular(name):
     return name
 
 
+def pep8_list(data, tab='', first_row_pad=0):
+    value = []
+    temp = []
+    for a in data:
+        temp.append(a)
+        pad = 0 if len(value) else first_row_pad
+        if len(tab + ', '.join(temp)) >= PEP8_LIMIT - pad:
+            value.append(tab + ', '.join(temp[:-1]) + ',')
+            temp = [temp[-1]]
+
+    if len(temp):
+        value.append(tab + ', '.join(temp))
+
+    return value
+
+
 class AttributeObject(object):
     def __init__(self, name, classname):
         self.name = name
@@ -90,13 +107,19 @@ class AttributeObject(object):
         if len(self.kwargs):
             arguments += ', ' + ", ".join(['%s=%s' % item for item in self.kwargs.items()])
         value = self.tab + "%s%s(%s)%s" % (name, self.classname, arguments, self.pylint_message or '')
-        if len(value) < 120:
+        if len(value) < PEP8_LIMIT:
             return value
 
-        # pep8 120 columns
-        # TODO
+        value = []
+        value.append(self.tab + "%s%s(%s" % (name, self.classname, self.pylint_message or ''))
 
-        return value
+        value.extend(pep8_list(
+            self.args + ['%s=%s' % item for item in self.kwargs.items()],
+            self.tab + TAB
+        ))
+        value.append(self.tab + ')')
+
+        return '\n'.join(value)
 
 
 def getType(column):
@@ -374,6 +397,7 @@ class TableObject(object):
 
         value.append(TAB + 'def __repr__(self):')
         value.append(TAB * 2 + 'return self.__str__()')
+        value.append('')
         value.append(TAB + 'def __str__(self):')
         attr = AttributeObject(None, self.name)
         attr.args = ['%%(%s)s' % name for name in self.columns_to_print]
@@ -412,10 +436,24 @@ if len(TYPES['sqla']):
 export.append("")
 export.append("if USE_MYSQL_TYPES:")
 if len(TYPES['mysql']):
-    export.append("    from sqlalchemy.dialects.mysql import %s" % ', '.join(TYPES['mysql']))
+    types = pep8_list(TYPES['mysql'], first_row_pad=37+len(TAB))
+    export.append(TAB + "from sqlalchemy.dialects.mysql import %s" % types[0])
+    if len(types) > 1:
+        export[-1] += ' \\'
+    for index in range(1, len(types)):
+        export.append(TAB * 2 + types[index])
+        if index < len(types) - 1:
+            export[-1] += ' \\'
 export.append("else:")
 if len(TYPES['sqla_alt']):
-    export.append("    from sqlalchemy import %s" % ', '.join(TYPES['sqla_alt']))
+    types = pep8_list(TYPES['sqla_alt'], first_row_pad=22+len(TAB))
+    export.append(TAB + "from sqlalchemy import %s" % types[0])
+    if len(types) > 1:
+        export[-1] += ' \\'
+    for index in range(1, len(types)):
+        export.append(TAB * 2 + types[index])
+        if index < len(types) - 1:
+            export[-1] += ' \\'
 export.append("")
 export.append("DECLARATIVE_BASE = declarative_base()")
 export.append("")
