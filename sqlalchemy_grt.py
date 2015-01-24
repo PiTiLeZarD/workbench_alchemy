@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 # MySQL Workbench Python script
-# <description>
-# Written in MySQL Workbench 6.2.3
 
 import grt
 import re
