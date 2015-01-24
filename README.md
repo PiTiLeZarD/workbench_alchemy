@@ -35,23 +35,22 @@ This:
 On execution it should look like this:
 ```
 Executing script /Users/xxx/Library/Application Support/MySQL/Workbench/scripts/sqlalchemy_grt.py...
---------------------
--- SQLAlchemy export v0.10.3
---------------------
  -> Working on customers
  -> Working on localities
  -> Working on invoices
+--------------------
+-- SQLAlchemy export v0.2
+--------------------
 Copied to clipboard
 
 Script finished.
-
 ```
 
 Then you just have to paste it somewhere, hopefully it looks like this:
 
 ```python
 """
-This file has been automatically generated with workbench_alchemy v0.10.3
+This file has been automatically generated with workbench_alchemy v0.2
 For more details please check here:
 https://github.com/PiTiLeZarD/workbench_alchemy
 """
@@ -65,7 +64,6 @@ except:
 
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, ForeignKey
-from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 
 if USE_MYSQL_TYPES:
@@ -73,15 +71,21 @@ if USE_MYSQL_TYPES:
 else:
     from sqlalchemy import Integer as INTEGER, String as VARCHAR, Float as FLOAT
 
-Base = declarative_base()
+DECLARATIVE_BASE = declarative_base()
 
 
-class Customer(Base):
+class Customer(DECLARATIVE_BASE):
+
     __tablename__ = 'customers'
+    __table_args__ = (
+        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'}
+    )
 
-    id = Column("id_customer", INTEGER, nullable=False, primary_key=True)
+    id = Column("id_customer", INTEGER, primary_key=True, nullable=False)  # pylint: disable=invalid-name
     name = Column(VARCHAR(45), index=True)
-    id_locality = Column("locality_id", INTEGER, ForeignKey("localities.id_locality", ondelete="CASCADE"), nullable=False, index=True)
+    id_locality = Column(
+        "locality_id", INTEGER, ForeignKey("localities.id_locality", ondelete="CASCADE"), index=True, nullable=False
+    )
 
     locality = relationship("Locality", foreign_keys=[id_locality])
 
@@ -89,28 +93,36 @@ class Customer(Base):
         return self.__str__()
 
     def __str__(self):
-        return '<Customer %(id)s>' % self.__dict__
+        return "<Customer(%(id)s)>" % self.__dict__
 
 
-class Locality(Base):
+class Locality(DECLARATIVE_BASE):
+
     __tablename__ = 'localities'
+    __table_args__ = (
+        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'}
+    )
 
-    id = Column("id_locality", INTEGER, nullable=False, primary_key=True)
-    name = Column(VARCHAR(45), unique=True)
+    id = Column("id_locality", INTEGER, primary_key=True, nullable=False)  # pylint: disable=invalid-name
+    name = Column(VARCHAR(45))
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
-        return '<Locality %(id)s>' % self.__dict__
+        return "<Locality(%(id)s)>" % self.__dict__
 
 
-class Invoice(Base):
+class Invoice(DECLARATIVE_BASE):
+
     __tablename__ = 'invoices'
+    __table_args__ = (
+        {'mysql_engine': 'InnoDB', 'sqlite_autoincrement': True, 'mysql_charset': 'utf8'}
+    )
 
-    id = Column(INTEGER, nullable=False, autoincrement=True, primary_key=True)
+    id = Column(INTEGER, autoincrement=True, primary_key=True, nullable=False)  # pylint: disable=invalid-name
     total = Column("amount", FLOAT)
-    id_customer = Column(INTEGER, ForeignKey("customers.id_customer"), nullable=False, index=True)
+    id_customer = Column(INTEGER, ForeignKey("customers.id_customer"), index=True, nullable=False)
 
     test = relationship("Customer", foreign_keys=[id_customer], backref="testbackrefs")
 
@@ -118,7 +130,7 @@ class Invoice(Base):
         return self.__str__()
 
     def __str__(self):
-        return '<Invoice %(total)s %(id)s>' % self.__dict__
+        return "<Invoice(%(total)s, %(id)s)>" % self.__dict__
 ```
 
 ### List of options
@@ -162,7 +174,7 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 
 from mylib.db.auto.schema import *
 
-Session = None
+SESSION = None
 
 def connect(dburi=None, **kwargs):
     dburi = dburi or 'sqlite:///'
@@ -184,15 +196,15 @@ def connect(dburi=None, **kwargs):
     session.configure(bind=engine)
 
     if createtable:
-        Base.metadata.create_all(engine)
+        DECLARATIVE_BASE.metadata.create_all(engine)
         if 'autocommit' not in kwargs:
             session.commit()
 
     return session
 
 if __name__ == '__main__':
-    Session = connect(createtable=True)
-    Session.commit()
+    SESSION = connect(createtable=True)
+    SESSION.commit()
 ```
 
 So this leaves you with the possibility of creating the database by just calling:
