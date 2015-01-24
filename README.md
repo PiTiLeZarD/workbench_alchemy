@@ -219,3 +219,11 @@ mylib.db.auto.USE_MYSQL_TYPES = False
 ```
 
 and you're good to go
+
+## Tests
+
+```
+mkvirtualenv workbench_alchemy
+pip install nose mock
+nosetests tests.py
+```
