@@ -24,6 +24,7 @@ SQLALCHEMY_TYPESMAP = {
     'Varchar': 'String',
     'Text': 'String',
     'Tinyint': 'Integer',
+    'Bigint': 'Integer',
     'Timestamp': 'DateTime',
     'Datetime': 'DateTime',
     'Double': 'Float',
