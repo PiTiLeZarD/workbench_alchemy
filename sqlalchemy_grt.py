@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 # MySQL Workbench Python script
+# <description>
+# Written in MySQL Workbench 6.2.3
 
 import grt
 import re
 
-VERSION = '0.2'
+VERSION = '0.2.1'
 
 USE_MYSQL_TYPES = True
 TAB = "    "
@@ -122,6 +124,8 @@ class AttributeObject(object):
 
 def getType(column):
     column_type = column.formattedType
+    if column.formattedRawType in ('BOOLEAN', 'BOOL'):
+        column_type = 'BOOLEAN'
     column_type = re.match(r'(?P<type>[^\(\)]+)(\((?P<size>[^\(\)]+)\))?', column_type).groupdict()
     column_type, size = (column_type['type'], column_type['size'])
     column_type = TYPESMAP.get(column_type.upper(), column_type).upper()
