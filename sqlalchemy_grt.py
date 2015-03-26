@@ -6,31 +6,12 @@
 import grt
 import re
 
-VERSION = '0.2.2'
+VERSION = '0.2.3'
 
 TAB = "    "
 PEP8_LIMIT = 120
 
-TYPES = {
-    'sqla': [],
-    'sqla_alt': [],
-    'mysql': [],
-}
-TYPESMAP = {
-    'INT': 'INTEGER',
-    'BOOL': 'BOOLEAN',
-}
-SQLALCHEMY_TYPESMAP = {
-    'Varchar': 'String',
-    'Text': 'String',
-    'Tinyint': 'Integer',
-    'Bigint': 'Integer',
-    'Timestamp': 'DateTime',
-    'Datetime': 'DateTime',
-    'Double': 'Float',
-    'Blob': 'String',
-}
-MYSQLTYPES = [
+AVAILABLE_TYPES = [
     'BIGINT', 'BINARY', 'BIT', 'BLOB', 'BOOLEAN', 'CHAR', 'DATE', 'DATETIME', 'DECIMAL',
     'DECIMAL', 'DOUBLE', 'ENUM', 'FLOAT', 'INTEGER', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB',
     'MEDIUMINT', 'MEDIUMTEXT', 'NCHAR', 'NUMERIC', 'NVARCHAR', 'REAL', 'SET', 'SMALLINT',
@@ -39,7 +20,7 @@ MYSQLTYPES = [
 
 
 def camelize(name):
-    return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name)
+    return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name.lower())
 
 
 def functionalize(name):
@@ -125,36 +106,57 @@ class AttributeObject(object):
         return '\n'.join(value)
 
 
-def getType(column):
-    column_type = column.formattedType
-    if column.formattedRawType in ('BOOLEAN', 'BOOL'):
-        column_type = 'BOOLEAN'
-    column_type = re.match(r'(?P<type>[^\(\)]+)(\((?P<size>[^\(\)]+)\))?', column_type).groupdict()
-    column_type, size = (column_type['type'], column_type['size'])
-    column_type = TYPESMAP.get(column_type.upper(), column_type).upper()
+class SqlaType(object):
 
-    if column_type not in MYSQLTYPES:
-        raise Exception('Unrecognized type <%s>' % column_type)
+    SQLALCHEMY_TYPESMAP = {
+        'Varchar': 'String',
+        'Text': 'String',
+        'Tinyint': 'Integer',
+        'Bigint': 'Integer',
+        'Timestamp': 'DateTime',
+        'Datetime': 'DateTime',
+        'Double': 'Float',
+        'Blob': 'String',
+    }
 
-    column_type = column_type.upper()
-    if column_type not in TYPES['mysql']:
-        TYPES['mysql'].append(column_type)
+    RAW_TYPE_MAP = {
+        'BOOL': 'BOOLEAN',
+        'BOOLEAN': 'BOOLEAN',
+    }
 
-        sqla = camelize(column_type.lower())
-        sqla = SQLALCHEMY_TYPESMAP.get(sqla, sqla)
-        if sqla == 'Integer':
-            TYPES['sqla_alt'].append(sqla)
-        else:
-            TYPES['sqla_alt'].append("%s as %s" % (sqla, column_type))
+    TYPE_MAP = {
+        'INT': 'INTEGER',
+    }
 
-    column_type_obj = AttributeObject(None, column_type)
-    if 'UNSIGNED' in column.flags and 'INT' in column_type:
-        column_type_obj.kwargs['unsigned'] = 'True'
+    def __init__(self):
+        self.sqla = set()
+        self.mysql = set()
 
-    if size and 'INT' not in column_type.upper():
-        column_type_obj.args.append(size)
+    def get(self, column):
+        column_type = column.formattedType
+        if column.formattedRawType in SqlaType.RAW_TYPE_MAP:
+            column_type = SqlaType.RAW_TYPE_MAP[column.formattedRawType]
 
-    return str(column_type_obj).replace('()', '')
+        column_type = re.match(r'(?P<type>[^\(\)]+)(\((?P<size>[^\(\)]+)\))?', column_type).groupdict()
+        column_type, size = (column_type['type'].upper(), column_type['size'])
+        column_type = SqlaType.TYPE_MAP.get(column_type, column_type).upper()
+
+        assert column_type in AVAILABLE_TYPES
+
+        self.mysql.add(column_type)
+
+        sqla = camelize(column_type)
+        sqla = SqlaType.SQLALCHEMY_TYPESMAP.get(sqla, sqla)
+        self.sqla.add(sqla if sqla == 'Integer' else "%s as %s" % (sqla, column_type))
+
+        column_type_obj = AttributeObject(None, column_type)
+        if 'UNSIGNED' in column.flags and 'INT' in column_type:
+            column_type_obj.kwargs['unsigned'] = 'True'
+
+        if size and 'INT' not in column_type.upper():
+            column_type_obj.args.append(size)
+
+        return str(column_type_obj).replace('()', '')
 
 
 class ColumnObject(object):
@@ -178,7 +180,7 @@ class ColumnObject(object):
         self._setForeignKey()
 
     def _setType(self):
-        self.column_type = getType(self._column)
+        self.column_type = USED_TYPES.get(self._column)
 
     def _setOptions(self):
         if self._column.comment:
@@ -409,6 +411,8 @@ class TableObject(object):
         return '\n'.join(value)
 
 
+USED_TYPES = SqlaType()
+
 tables = []
 for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
     print " -> Working on %s" % table.name
@@ -428,13 +432,13 @@ export.append("from sqlalchemy import Column, ForeignKey")
 if len([1 for t in tables if len(t.indices['UNIQUE_MULTI'])]):
     export.append("from sqlalchemy.schema import UniqueConstraint")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
-if len(TYPES['sqla']):
-    export.append("from sqlalchemy import %s" % ', '.join(TYPES['sqla']))
 export.append("")
 
 
 def append_types(types, from_import):
     lines = []
+    if not len(types):
+        return lines
     from_import = "from %s import" % from_import
     types = pep8_list(types, first_row_pad=len(TAB) + len(from_import))
     lines.append(TAB + "%s %s" % (from_import, types[0]))
@@ -448,10 +452,10 @@ def append_types(types, from_import):
 
 
 export.append("if os.environ.get('DB_TYPE', 'MySQL') == 'MySQL':")
-export = export + append_types(TYPES['mysql'], 'sqlalchemy.dialects.mysql')
+export = export + append_types(USED_TYPES.mysql, 'sqlalchemy.dialects.mysql')
 export.append("else:")
-export = export + append_types(TYPES['sqla_alt'], 'sqlalchemy')
-if 'Integer' in TYPES['sqla_alt']:
+export = export + append_types(USED_TYPES.sqla, 'sqlalchemy')
+if 'Integer' in USED_TYPES.sqla:
     export.append("")
     export.append("    class INTEGER(Integer):")
     export.append("        def __init__(self, *args, **kwargs):")
