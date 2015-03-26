@@ -6,9 +6,8 @@
 import grt
 import re
 
-VERSION = '0.2.1'
+VERSION = '0.2.2'
 
-USE_MYSQL_TYPES = True
 TAB = "    "
 PEP8_LIMIT = 120
 
@@ -19,6 +18,7 @@ TYPES = {
 }
 TYPESMAP = {
     'INT': 'INTEGER',
+    'BOOL': 'BOOLEAN',
 }
 SQLALCHEMY_TYPESMAP = {
     'Varchar': 'String',
@@ -105,8 +105,10 @@ class AttributeObject(object):
 
         # condensed
         arguments = ", ".join(self.args)
+        if len(self.args) and len(self.kwargs):
+            arguments += ', '
         if len(self.kwargs):
-            arguments += ', ' + ", ".join(['%s=%s' % item for item in self.kwargs.items()])
+            arguments += ", ".join(['%s=%s' % item for item in self.kwargs.items()])
         value = self.tab + "%s%s(%s)%s" % (name, self.classname, arguments, self.pylint_message or '')
         if len(value) < PEP8_LIMIT:
             return value
@@ -131,30 +133,28 @@ def getType(column):
     column_type, size = (column_type['type'], column_type['size'])
     column_type = TYPESMAP.get(column_type.upper(), column_type).upper()
 
-    if USE_MYSQL_TYPES and column_type in MYSQLTYPES:
-        # case of mysql TYPES
-        column_type = column_type.upper()
-        if column_type not in TYPES['mysql']:
-            TYPES['mysql'].append(column_type)
+    if column_type not in MYSQLTYPES:
+        raise Exception('Unrecognized type <%s>' % column_type)
 
-            sqla = camelize(column_type.lower())
-            sqla = SQLALCHEMY_TYPESMAP.get(sqla, sqla)
+    column_type = column_type.upper()
+    if column_type not in TYPES['mysql']:
+        TYPES['mysql'].append(column_type)
+
+        sqla = camelize(column_type.lower())
+        sqla = SQLALCHEMY_TYPESMAP.get(sqla, sqla)
+        if sqla == 'Integer':
+            TYPES['sqla_alt'].append(sqla)
+        else:
             TYPES['sqla_alt'].append("%s as %s" % (sqla, column_type))
 
-        if 'UNSIGNED' in column.flags and 'INT' in column_type:
-            column_type = '%s(unsigned=True)' % column_type
-
-    else:
-        # sqlalchemy TYPES
-        column_type = camelize(column_type.lower())
-        column_type = SQLALCHEMY_TYPESMAP.get(column_type, column_type)
-        if column_type not in TYPES['sqla']:
-            TYPES['sqla'].append(column_type)
+    column_type_obj = AttributeObject(None, column_type)
+    if 'UNSIGNED' in column.flags and 'INT' in column_type:
+        column_type_obj.kwargs['unsigned'] = 'True'
 
     if size and 'INT' not in column_type.upper():
-        column_type = '%s(%s)' % (column_type, size)
+        column_type_obj.args.append(size)
 
-    return column_type
+    return str(column_type_obj).replace('()', '')
 
 
 class ColumnObject(object):
@@ -422,13 +422,7 @@ export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
 export.append('"""')
 
 export.append("")
-export.append("USE_MYSQL_TYPES = %s" % USE_MYSQL_TYPES)
-export.append("try:")
-export.append("    from . import USE_MYSQL_TYPES")
-export.append("except:")
-export.append("    pass")
-export.append("")
-export.append("")
+export.append("import os")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
 if len([1 for t in tables if len(t.indices['UNIQUE_MULTI'])]):
@@ -437,26 +431,33 @@ export.append("from sqlalchemy.ext.declarative import declarative_base")
 if len(TYPES['sqla']):
     export.append("from sqlalchemy import %s" % ', '.join(TYPES['sqla']))
 export.append("")
-export.append("if USE_MYSQL_TYPES:")
-if len(TYPES['mysql']):
-    types = pep8_list(TYPES['mysql'], first_row_pad=37+len(TAB))
-    export.append(TAB + "from sqlalchemy.dialects.mysql import %s" % types[0])
+
+
+def append_types(types, from_import):
+    lines = []
+    from_import = "from %s import" % from_import
+    types = pep8_list(types, first_row_pad=len(TAB) + len(from_import))
+    lines.append(TAB + "%s %s" % (from_import, types[0]))
     if len(types) > 1:
-        export[-1] += ' \\'
+        lines[-1] += ' \\'
     for index in range(1, len(types)):
-        export.append(TAB * 2 + types[index])
+        lines.append(TAB * 2 + types[index])
         if index < len(types) - 1:
-            export[-1] += ' \\'
+            lines[-1] += ' \\'
+    return lines
+
+
+export.append("if os.environ.get('DB_TYPE', 'MySQL') == 'MySQL':")
+export = export + append_types(TYPES['mysql'], 'sqlalchemy.dialects.mysql')
 export.append("else:")
-if len(TYPES['sqla_alt']):
-    types = pep8_list(TYPES['sqla_alt'], first_row_pad=22+len(TAB))
-    export.append(TAB + "from sqlalchemy import %s" % types[0])
-    if len(types) > 1:
-        export[-1] += ' \\'
-    for index in range(1, len(types)):
-        export.append(TAB * 2 + types[index])
-        if index < len(types) - 1:
-            export[-1] += ' \\'
+export = export + append_types(TYPES['sqla_alt'], 'sqlalchemy')
+if 'Integer' in TYPES['sqla_alt']:
+    export.append("")
+    export.append("    class INTEGER(Integer):")
+    export.append("        def __init__(self, *args, **kwargs):")
+    export.append("            super(Integer, self).__init__()")
+    export.append("")
+
 export.append("")
 export.append("DECLARATIVE_BASE = declarative_base()")
 export.append("")

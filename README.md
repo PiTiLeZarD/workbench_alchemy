@@ -8,16 +8,14 @@ workbench_alchemy
 
 SQLAlchemy model creation for MySQL Workbench
 
-If you want to use it as a design software and your DB is not mysql, you can disable the use of MySQL specific types by changing:
+By default, you'll be using the general sqlalchemy dialect. If you want to have a MySQL/MariaDB specific dialect, you can do so by
+updating the env variable DB_TYPE
 
 ```
-USE_MYSQL_TYPES = True
-```
+import os
+os.environ['DB_TYPE'] = 'MySQL'
 
-to
-
-```
-USE_MYSQL_TYPES = False
+from mypackage.db.schema import MyClass  # this will use the mysql dialects
 ```
 
 ### How to execute example.mwb file?
@@ -39,7 +37,7 @@ Executing script /Users/xxx/Library/Application Support/MySQL/Workbench/scripts/
  -> Working on localities
  -> Working on invoices
 --------------------
--- SQLAlchemy export v0.2
+-- SQLAlchemy export v0.2.2
 --------------------
 Copied to clipboard
 
@@ -50,26 +48,25 @@ Then you just have to paste it somewhere, hopefully it looks like this:
 
 ```python
 """
-This file has been automatically generated with workbench_alchemy v0.2
+This file has been automatically generated with workbench_alchemy v0.2.2
 For more details please check here:
 https://github.com/PiTiLeZarD/workbench_alchemy
 """
 
-USE_MYSQL_TYPES = True
-try:
-    from . import USE_MYSQL_TYPES
-except:
-    pass
-
-
+import os
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 
-if USE_MYSQL_TYPES:
+if os.environ.get('DB_TYPE', 'MySQL') == 'MySQL':
     from sqlalchemy.dialects.mysql import INTEGER, VARCHAR, FLOAT
 else:
-    from sqlalchemy import Integer as INTEGER, String as VARCHAR, Float as FLOAT
+    from sqlalchemy import Integer, String as VARCHAR, Float as FLOAT
+
+    class INTEGER(Integer):
+        def __init__(self, *args, **kwargs):
+            super(Integer, self).__init__()
+
 
 DECLARATIVE_BASE = declarative_base()
 
