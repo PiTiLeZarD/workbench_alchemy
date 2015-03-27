@@ -6,7 +6,13 @@
 import grt
 import re
 
-VERSION = '0.2.3'
+# TODO: MultiUnique constraints
+# TODO: datetime/date/time default values and on update
+# TODO: comment on foreignkeys and generally place the options at the right place
+# TODO: update the docs so we can understand anything
+# TODO: finish the backref and foreign keys thingy
+
+VERSION = '0.3'
 
 TAB = "    "
 PEP8_LIMIT = 120
@@ -69,20 +75,25 @@ def pep8_list(data, tab='', first_row_pad=0):
     return value
 
 
+def options(string):
+    return dict([t.split('=') for t in string.split(',') if '=' in t])
+
+
 class AttributeObject(object):
     def __init__(self, name, classname):
         self.name = name
         self.classname = classname
-        self.pylint_message = None
+        self.comment = None
         self.args = []
         self.kwargs = {}
         self.tab = ''
 
     def __str__(self):
         name = "%s = " % self.name if self.name else ''
+        comment = '' if not self.comment else '  # %s' % self.comment
         # simple case
         if not len(self.args) and not len(self.kwargs):
-            return self.tab + "%s%s()%s" % (name, self.classname, self.pylint_message or '')
+            return self.tab + "%s%s()%s" % (name, self.classname, comment)
 
         # condensed
         arguments = ", ".join(self.args)
@@ -90,12 +101,12 @@ class AttributeObject(object):
             arguments += ', '
         if len(self.kwargs):
             arguments += ", ".join(['%s=%s' % item for item in self.kwargs.items()])
-        value = self.tab + "%s%s(%s)%s" % (name, self.classname, arguments, self.pylint_message or '')
+        value = self.tab + "%s%s(%s)%s" % (name, self.classname, arguments, comment)
         if len(value) < PEP8_LIMIT:
             return value
 
         value = []
-        value.append(self.tab + "%s%s(%s" % (name, self.classname, self.pylint_message or ''))
+        value.append(self.tab + "%s%s(%s" % (name, self.classname, comment))
 
         value.extend(pep8_list(
             self.args + ['%s=%s' % item for item in self.kwargs.items()],
@@ -161,52 +172,30 @@ class SqlaType(object):
 
 class ColumnObject(object):
 
-    def __init__(self, column, table_obj):
+    def __init__(self, column, index=False, primary=False, unique=False):
         self._column = column
-        self.table_obj = table_obj
-        self.name = column.name
-
-        self.options = {}
-        self.column_type = None
-        self.features = {}
+        self.index = index
+        self.primary = primary
+        self.unique = unique
         self.foreign_key = None
+        self.foreign_column = None
 
-        self.build()
-
-    def build(self):
-        self._setType()
-        self._setOptions()
-        self._setFeatures()
-        self._setForeignKey()
-
-    def _setType(self):
+        self.options = options(column.comment)
         self.column_type = USED_TYPES.get(self._column)
+        self.name = self.options.get('alias', column.name)
 
-    def _setOptions(self):
-        if self._column.comment:
-            self.options = dict([t.split('=') for t in self._column.comment.split(',') if '=' in t])
+        primary_keys = len([c.referencedColumn.name
+                            for i in column.owner.indices
+                            for c in i.columns if i.indexType == 'PRIMARY'])
 
-        self.name = self.options.get('alias', self.name)
+        if self.primary and primary_keys == 1 and self.name != 'id':
+            self.name = 'id'
 
-    def _setFeatures(self):
-        if self._column.isNotNull == 1:
-            self.features['nullable'] = False
-        if self._column.autoIncrement == 1:
-            self.features['autoincrement'] = True
+        self.features = {}
 
-        if self._column.name in self.table_obj.indices['PRIMARY']:
-            self.features['primary_key'] = True
-            if (len(self.table_obj.indices['PRIMARY']) == 1) and self.name != 'id':
-                self.name = 'id'
-            elif self._column.autoIncrement != 1:
-                self.features['autoincrement'] = False
-        if self._column.name in self.table_obj.indices['INDEX']:
-            self.features['index'] = True
-        if self._column.name in [i[1][0] for i in self.table_obj.indices['UNIQUE'] if len(i[1]) == 1]:
-            self.features['unique'] = True
-
-        if self._column.defaultValue:
-            self.features['default'] = self._column.defaultValue
+    def setForeignKey(self, foreign_key, foreign_column):
+        self.foreign_key = foreign_key
+        self.foreign_column = foreign_column
 
     def _setForeignKey(self):
         foreign_key = self.table_obj.foreign_keys.get(self._column.name, None)
@@ -221,22 +210,78 @@ class ColumnObject(object):
 
             self.foreign_key = str(attr)
 
+    def to_print(self):
+        return self.options.get('toprint', 'True' if self.primary else 'False') == 'True'
+
+    def getBackref(self):
+        fktable = camelize(self.foreign_key.referencedColumns[0].owner.name)
+        fkname = self.options.get('fkname', functionalize(singular(fktable)))
+        attr = AttributeObject(fkname, 'relationship')
+        attr.tab = TAB
+
+        attr.kwargs['foreign_keys'] = '[%s]' % self.name
+        return None
+
+        # relation = '%s.%s' % (
+        #     self.foreign_key.referencedColumns[0].owner.name,
+        #     self.foreign_key.referencedColumns[0].name
+        # )
+        # ondelete = onupdate = None
+        # if self.foreign_key.deleteRule and self.foreign_key.deleteRule != "NO ACTION":
+        #     ondelete = self.foreign_key.deleteRule
+        # if self.foreign_key.updateRule and self.foreign_key.updateRule != "NO ACTION":
+        #     onupdate = self.foreign_key.updateRule
+
+
+        # if self.options.get('relation', True) == 'False':
+        #     self.comments.append("relation <%s> ignored for this table" % fkname)
+        #     return
+
+        # backrefname = None
+        # remote_side = None
+        # if self.options.get('backref', True) != 'False':
+        #     backrefname = self.options.get('backrefname', functionalize(self._table.name))
+        #     remote_side = self.options.get('remote_side', None)
+
+        # self.relations.append((
+        #     fkname, singular(fktable), self.name, backrefname, remote_side
+        # ))
+
+        # attr.args.append(quote(singular(fktable)))
+        # if backrefname:
+        #     attr.kwargs['backref'] = quote(backrefname)
+        # if remote_side:
+        #     attr.kwargs['remote_side'] = '[%s]' % remote_side
+
+        # return attr
+
     def __str__(self):
         attr = AttributeObject(self.name, 'Column')
         attr.tab = TAB
 
-        if self.name == 'id':
-            attr.pylint_message = '  # pylint: disable=invalid-name'
-
         if self.name != self._column.name:
             attr.args.append(quote(self._column.name))
-
         attr.args.append(self.column_type)
 
-        if self.foreign_key:
-            attr.args.append(self.foreign_key)
+        if self._column.isNotNull == 1:
+            attr.kwargs['nullable'] = False
+        if self._column.autoIncrement == 1:
+            attr.kwargs['autoincrement'] = True
+        if self.primary and self.name == 'id' and self._column.autoIncrement != 1:
+            attr.kwargs['autoincrement'] = False
+        if self.unique:
+            attr.kwargs['unique'] = True
+        if self.index:
+            attr.kwargs['index'] = True
+        if self._column.defaultValue:
+            attr.kwargs['default'] = self._column.defaultValue
+        if self.name == 'id':
+            attr.comment = 'pylint: disable=invalid-name'
 
-        attr.kwargs = self.features
+        # if self.foreign_key:
+        #     attr.args.append(self.foreign_key)
+
+        # attr.kwargs = self.features
 
         return str(attr)
 
@@ -249,24 +294,14 @@ class TableObject(object):
 
         self.comments = []
         self.table_args = {}
-        self.uniques = {}
         self.options = {}
-        self.indices = {'PRIMARY': [], 'INDEX': [], 'UNIQUE': {}, 'UNIQUE_MULTI': {}}
-        self.foreign_keys = {}
         self.columns = []
-        self.relations = []
-        self.columns_to_print = set()
 
         self.build()
 
     def build(self):
         self._setTableArgs()
-        self._setIndices()
-        self._setUniques()
-        self._setForeignKeys()
         self._setColumns()
-        self._setRelations()
-        self._setColumnsToPrint()
 
     def _setTableArgs(self):
         if self._table.tableEngine:
@@ -279,48 +314,29 @@ class TableObject(object):
         if sum([column.autoIncrement for column in self._table.columns]) > 0:
             self.table_args['sqlite_autoincrement'] = True
 
-    def _setUniques(self):
-        uniques_multi = [i for i in self.indices['UNIQUE'] if len(i[1]) > 1]
-        if not len(uniques_multi):
-            return
-
-        for index_name, columns in uniques_multi:
-            self.indices['UNIQUE_MULTI'][index_name] = columns
-
-    def _setIndices(self):
-        for index in self._table.indices:
-            if index.indexType == 'PRIMARY':
-                self.indices['PRIMARY'] += [c.referencedColumn.name for c in index.columns]
-            if index.indexType == 'INDEX':
-                self.indices['INDEX'] += [c.referencedColumn.name for c in index.columns]
-            if index.indexType == 'UNIQUE':
-                if len(index.columns) > 1:
-                    self.indices['UNIQUE_MULTI'][index.name] = [c.referencedColumn.name for c in index.columns]
-                else:
-                    self.indices['UNIQUE'].update(
-                        dict([([c.referencedColumn.name for c in index.columns][0], index.name)])
-                    )
-
-    def _setForeignKeys(self):
-        for fk in self._table.foreignKeys:
-            if len(fk.referencedColumns) > 1:
-                # I don't even think that sqlalchemy handles multi column foreign keys...
-                self.comments.append('multicolumns foreign key ignored')
-                continue
-
-            for i in range(0, len(fk.referencedColumns)):
-                relation = '%s.%s' % (fk.referencedColumns[i].owner.name, fk.referencedColumns[i].name)
-                fktable = camelize(fk.referencedColumns[i].owner.name)
-                ondelete = onupdate = None
-                if fk.deleteRule and fk.deleteRule != "NO ACTION":
-                    ondelete = fk.deleteRule
-                if fk.updateRule and fk.updateRule != "NO ACTION":
-                    onupdate = fk.updateRule
-                self.foreign_keys[fk.columns[i].name] = (relation, fktable, ondelete, onupdate)
-
     def _setColumns(self):
         for column in self._table.columns:
-            self.columns.append(ColumnObject(column, self))
+            indices = {
+                index.indexType: [c.referencedColumn.name for c in index.columns]
+                for index in self._table.indices
+            }
+
+            self.columns.append(ColumnObject(
+                column,
+                index=column.name in indices.get('INDEX', []),
+                primary=column.name in indices.get('PRIMARY', []),
+                unique=column.name in indices.get('UNIQUE', [])
+            ))
+
+        # link columns together with foreign keys
+        for foreign_key in self._table.foreignKeys:
+            if len(foreign_key.referencedColumns) > 1:
+                self.comments.append('Foreign Key ignored')
+                continue
+
+            self.getColumn(foreign_key.columns[0].name).setForeignKey(
+                foreign_key, self.getColumn(foreign_key.referencedColumns[0].name)
+            )
 
     def getColumn(self, name):
         for column in self.columns:
@@ -329,39 +345,6 @@ class TableObject(object):
             if column._column.name == name:
                 return column
         return None
-
-    def _setRelations(self):
-        if 'norelations' in self._table.comment:
-            self.comments.append("relations ignored for this table")
-            return
-
-        for column_name, v in self.foreign_keys.items():
-            column = self.getColumn(column_name)
-            fkcol, fktable, ondelete, onupdate = v
-            fkname = column.options.get('fkname', functionalize(singular(fktable)))
-
-            if column.options.get('relation', True) == 'False':
-                self.comments.append("relation <%s> ignored for this table" % fkname)
-                continue
-
-            backrefname = None
-            remote_side = None
-            if column.options.get('backref', True) != 'False':
-                backrefname = column.options.get('backrefname', functionalize(self._table.name))
-                remote_side = column.options.get('remote_side', None)
-
-            self.relations.append((
-                fkname, singular(fktable), column.name, backrefname, remote_side
-            ))
-
-    def _setColumnsToPrint(self):
-        for column in [self.getColumn(name) for name in self.indices['PRIMARY']]:
-            if column.options.get('toprint', False) == 'False':
-                continue
-            self.columns_to_print.add(column.name)
-        for column in self.columns:
-            if column.options.get('toprint', False) == 'True':
-                self.columns_to_print.add(column.name)
 
     def __str__(self):
         value = []
@@ -377,8 +360,8 @@ class TableObject(object):
             value.append(TAB + "__tablename__ = '%s'" % self._table.name)
 
         value.append(TAB + "__table_args__ = (")
-        for index_name, columns in self.indices['UNIQUE_MULTI'].items():
-            value.append(TAB * 2 + "UniqueConstraint('%s', name='%s')," % ("', '".join(columns), index_name))
+        # for index_name, columns in self.indices['UNIQUE_MULTI'].items():
+        #     value.append(TAB * 2 + "UniqueConstraint('%s', name='%s')," % ("', '".join(columns), index_name))
         value.append(TAB * 2 + "%s" % self.table_args)
         value.append(TAB + ")")
 
@@ -386,26 +369,18 @@ class TableObject(object):
         value.extend([str(c) for c in self.columns])
         value.append('')
 
-        for fkname, fktable, column_name, backrefname, remote_side in self.relations:
-            attr = AttributeObject(fkname, 'relationship')
-            attr.tab = TAB
-            attr.args.append(quote(singular(fktable)))
-            attr.kwargs['foreign_keys'] = '[%s]' % column_name
-            if backrefname:
-                attr.kwargs['backref'] = quote(backrefname)
-            if remote_side:
-                attr.kwargs['remote_side'] = '[%s]' % remote_side
-            value.append(str(attr))
+        # relations = [str(br for br in [c.getBackref() for c in self.columns] if br is not None)]
+        # value.extend(relations)
 
-        if len(self.relations):
-            value.append('')
+        # if len(relations):
+        #     value.append('')
 
         value.append(TAB + 'def __repr__(self):')
         value.append(TAB * 2 + 'return self.__str__()')
         value.append('')
         value.append(TAB + 'def __str__(self):')
         attr = AttributeObject(None, self.name)
-        attr.args = ['%%(%s)s' % name for name in self.columns_to_print]
+        attr.args = ['%%(%s)s' % c.name for c in self.columns if c.to_print()]
         value.append(TAB * 2 + 'return "<%s>" %% self.__dict__' % str(attr))
 
         return '\n'.join(value)
@@ -429,8 +404,8 @@ export.append("")
 export.append("import os")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
-if len([1 for t in tables if len(t.indices['UNIQUE_MULTI'])]):
-    export.append("from sqlalchemy.schema import UniqueConstraint")
+# if len([1 for t in tables if len(t.indices['UNIQUE_MULTI'])]):
+#     export.append("from sqlalchemy.schema import UniqueConstraint")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
 export.append("")
 
