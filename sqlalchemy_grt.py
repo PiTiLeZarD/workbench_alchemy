@@ -10,7 +10,6 @@ import re
 # TODO: datetime/date/time default values and on update
 # TODO: comment on foreignkeys and generally place the options at the right place
 # TODO: update the docs so we can understand anything
-# TODO: finish the backref and foreign keys thingy
 
 VERSION = '0.3'
 
@@ -184,7 +183,7 @@ class ColumnObject(object):
         self.column_type = USED_TYPES.get(self._column)
         self.name = self.options.get('alias', column.name)
 
-        primary_keys = len([c.referencedColumn.name
+        primary_keys = len([1
                             for i in column.owner.indices
                             for c in i.columns if i.indexType == 'PRIMARY'])
 
@@ -197,63 +196,31 @@ class ColumnObject(object):
         self.foreign_key = foreign_key
         self.foreign_column = foreign_column
 
-    def _setForeignKey(self):
-        foreign_key = self.table_obj.foreign_keys.get(self._column.name, None)
-        if foreign_key:
-            fkcol, fktable, ondelete, onupdate = foreign_key
-            attr = AttributeObject(None, 'ForeignKey')
-            attr.args.append(quote(fkcol))
-            if ondelete:
-                attr.kwargs['ondelete'] = quote(ondelete)
-            if onupdate:
-                attr.kwargs['onupdate'] = quote(onupdate)
-
-            self.foreign_key = str(attr)
-
     def to_print(self):
         return self.options.get('toprint', 'True' if self.primary else 'False') == 'True'
 
     def getBackref(self):
         fktable = camelize(self.foreign_key.referencedColumns[0].owner.name)
         fkname = self.options.get('fkname', functionalize(singular(fktable)))
+
+        if self.options.get('relation', True) == 'False':
+            self.comments.append("relation <%s/%s> ignored for this table" % (fkname, fkname))
+            return None
+
         attr = AttributeObject(fkname, 'relationship')
         attr.tab = TAB
 
+        attr.args.append(quote(singular(fktable)))
+
         attr.kwargs['foreign_keys'] = '[%s]' % self.name
-        return None
 
-        # relation = '%s.%s' % (
-        #     self.foreign_key.referencedColumns[0].owner.name,
-        #     self.foreign_key.referencedColumns[0].name
-        # )
-        # ondelete = onupdate = None
-        # if self.foreign_key.deleteRule and self.foreign_key.deleteRule != "NO ACTION":
-        #     ondelete = self.foreign_key.deleteRule
-        # if self.foreign_key.updateRule and self.foreign_key.updateRule != "NO ACTION":
-        #     onupdate = self.foreign_key.updateRule
+        if self.options.get('backref', True) != 'False':
+            attr.kwargs['backref'] = quote(self.options.get('backrefname', functionalize(singular(self._column.owner.name))))
 
+        if self.options.get('remote_side', None):
+            attr.kwargs['remote_side'] = '[%s]' % self.options.get('remote_side', None)
 
-        # if self.options.get('relation', True) == 'False':
-        #     self.comments.append("relation <%s> ignored for this table" % fkname)
-        #     return
-
-        # backrefname = None
-        # remote_side = None
-        # if self.options.get('backref', True) != 'False':
-        #     backrefname = self.options.get('backrefname', functionalize(self._table.name))
-        #     remote_side = self.options.get('remote_side', None)
-
-        # self.relations.append((
-        #     fkname, singular(fktable), self.name, backrefname, remote_side
-        # ))
-
-        # attr.args.append(quote(singular(fktable)))
-        # if backrefname:
-        #     attr.kwargs['backref'] = quote(backrefname)
-        # if remote_side:
-        #     attr.kwargs['remote_side'] = '[%s]' % remote_side
-
-        # return attr
+        return str(attr)
 
     def __str__(self):
         attr = AttributeObject(self.name, 'Column')
@@ -263,12 +230,27 @@ class ColumnObject(object):
             attr.args.append(quote(self._column.name))
         attr.args.append(self.column_type)
 
+        if self.foreign_key:
+            fk = AttributeObject(None, 'ForeignKey')
+            fk.args.append(quote("%s.%s" % (
+                self.foreign_key.referencedColumns[0].owner.name,
+                self.foreign_key.referencedColumns[0].name
+            )))
+            if self.foreign_key.deleteRule and self.foreign_key.deleteRule != "NO ACTION":
+                fk.kwargs['ondelete'] = quote(self.foreign_key.deleteRule)
+            if self.foreign_key.updateRule and self.foreign_key.updateRule != "NO ACTION":
+                fk.kwargs['onupdate'] = quote(self.foreign_key.updateRule)
+
+            attr.args.append(str(fk))
+
         if self._column.isNotNull == 1:
             attr.kwargs['nullable'] = False
         if self._column.autoIncrement == 1:
             attr.kwargs['autoincrement'] = True
         if self.primary and self.name == 'id' and self._column.autoIncrement != 1:
             attr.kwargs['autoincrement'] = False
+        if self.primary:
+            attr.kwargs['primary'] = True
         if self.unique:
             attr.kwargs['unique'] = True
         if self.index:
@@ -297,9 +279,6 @@ class TableObject(object):
         self.options = {}
         self.columns = []
 
-        self.build()
-
-    def build(self):
         self._setTableArgs()
         self._setColumns()
 
@@ -369,11 +348,11 @@ class TableObject(object):
         value.extend([str(c) for c in self.columns])
         value.append('')
 
-        # relations = [str(br for br in [c.getBackref() for c in self.columns] if br is not None)]
-        # value.extend(relations)
+        relations = [br for br in [c.getBackref() for c in self.columns] if br is not None]
+        value.extend(relations)
 
-        # if len(relations):
-        #     value.append('')
+        if len(relations):
+            value.append('')
 
         value.append(TAB + 'def __repr__(self):')
         value.append(TAB * 2 + 'return self.__str__()')

@@ -159,7 +159,7 @@ optname=optvalue,optname=optvalue...
 Or rather a suggestion, this is how I use it:
 ```
 ./mylib/db/schema.py <-- I will describe this file
-./mylib/db/auto/__init__.py <- I just have USE_MYSQL_TYPES = True in there
+./mylib/db/auto/__init__.py
 ./mylib/db/auto/schema.py <- I copy bluntly here the result of the script
 ```
 

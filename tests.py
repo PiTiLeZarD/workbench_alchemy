@@ -39,14 +39,14 @@ class TestAttributeObject(unittest.TestCase):
 
     def test_01(self):
         attr = AttributeObject('test', 'Test')
-        attr.pylint_message = '  # pylint-test'
+        attr.comment = 'pylint-test'
         self.assertEquals('test = Test()  # pylint-test', str(attr))
 
     def test_02(self):
         attr = AttributeObject('test', 'Test')
         attr.args.extend(['"a"', 'b', 'c'])
         attr.kwargs['test'] = '"value"'
-        attr.pylint_message = '  # pylint-test'
+        attr.comment = 'pylint-test'
         attr.tab = '    '
         self.assertEquals('    test = Test("a", b, c, test="value")  # pylint-test', str(attr))
 
@@ -57,7 +57,7 @@ class TestAttributeObject(unittest.TestCase):
         attr = AttributeObject('test', 'Test')
         attr.tab = '    '
         attr.args.extend(['"qwertyuiop"', 'asdfghjkl', 'zxcvbnm', 'poiuytrew', 'qwertyui'])
-        attr.pylint_message = '  # pylint-test'
+        attr.comment = 'pylint-test'
         attr.kwargs.update({
             'sdljfsdf': '12',
             'sldkjfasdf': '"ewuhofnocnwoedsf"',
@@ -122,13 +122,72 @@ class TestGetType(unittest.TestCase):
 class TestColumnObject(unittest.TestCase):
 
     @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
-    def test_00(self, get_type_mock):
+    def test_name_switch_primary_key(self, get_type_mock):
+        get_type_mock.return_value = 'INTEGER'
+        column = MagicMock(owner=MagicMock(indices=[MagicMock(
+            columns=['id_something'],
+            indexType='PRIMARY'
+        )]), defaultValue=None)
+        column.name = 'id_something'
+
+        column_obj = ColumnObject(column, primary=True)
+        self.assertEquals('id', column_obj.name)
+
+        self.assertEquals(
+            '    id = Column("id_something", INTEGER, autoincrement=False, primary=True)  # pylint: disable=invalid-name',
+            str(column_obj)
+        )
+
+    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
+    def test_basic(self, get_type_mock):
         get_type_mock.return_value = 'String'
         column = MagicMock(comment='alias=test', defaultValue=None)
         column.name = 'test_column'
-        table_obj = MagicMock(foreign_keys={})
-        column_obj = ColumnObject(column, table_obj)
+        column_obj = ColumnObject(column)
         self.assertEquals('    test = Column("test_column", String)', str(column_obj))
+
+    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
+    def test_few_options(self, get_type_mock):
+        get_type_mock.return_value = 'INTEGER'
+        column = MagicMock(defaultValue='"test"', isNotNull=1, autoIncrement=1)
+        column.name = 'test'
+
+        column_obj = ColumnObject(column, primary=True, unique=True, index=True)
+
+        self.assertEquals(
+            '    test = Column(INTEGER, index=True, nullable=False, default="test", autoincrement=True, primary=True, unique=True)',
+            str(column_obj)
+        )
+
+    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
+    def test_backref(self, get_type_mock):
+        get_type_mock.return_value = 'INTEGER'
+
+        column = MagicMock(owner=MagicMock(), defaultValue=None)
+        column.name = 'test'
+        column.owner.name = 'tables'
+        column_obj = ColumnObject(column)
+
+        column_ref = MagicMock(owner=MagicMock())
+        column_ref.name = 'ref'
+        column_ref.owner.name = 'table_refs'
+        column_ref_obj = ColumnObject(column_ref)
+
+        foreign_key = MagicMock(referencedColumns=[column_ref])
+        foreign_key.deleteRule = 'NO ACTION'
+        foreign_key.updateRule = 'SET NULL'
+
+        column_obj.setForeignKey(foreign_key, column_ref_obj)
+
+        self.assertEquals(
+            '    tableref = relationship("TableRef", foreign_keys=[test], backref="table")',
+            column_obj.getBackref()
+        )
+
+        self.assertEquals(
+            '    test = Column(INTEGER, ForeignKey("table_refs.ref", onupdate="SET NULL"))',
+            str(column_obj)
+        )
 
 
 class TestTableObject(unittest.TestCase):
