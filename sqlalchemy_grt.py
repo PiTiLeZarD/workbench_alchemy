@@ -441,7 +441,7 @@ if 'Integer' in USED_TYPES.sqla:
     export.append("")
     export.append("    class INTEGER(Integer):")
     export.append("        def __init__(self, *args, **kwargs):")
-    export.append("            super(Integer, self).__init__()")
+    export.append("            super(Integer, self).__init__()  # pylint: disable=bad-super-call")
     export.append("")
 
 export.append("")
