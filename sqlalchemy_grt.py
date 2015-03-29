@@ -5,6 +5,7 @@
 
 import grt
 import re
+from collections import defaultdict
 
 # TODO: comment on foreignkeys and generally place the options at the right place
 # TODO: update the docs so we can understand anything
@@ -205,8 +206,9 @@ class ColumnObject(object):
         if not self.foreign_key:
             return None
 
-        fktable = camelize(self.foreign_key.referencedColumns[0].owner.name)
+        fktable = self.foreign_key.referencedColumns[0].owner.name
         fkname = self.options.get('fkname', functionalize(singular(fktable)))
+        fktable = camelize(fktable)
 
         if self.options.get('relation', True) == 'False':
             self.comments.append("relation <%s/%s> ignored for this table" % (fkname, fkname))
@@ -221,8 +223,7 @@ class ColumnObject(object):
 
         if self.options.get('backref', True) != 'False':
             attr.kwargs['backref'] = quote(
-                self.options.get('backrefname', functionalize(singular(self._column.owner.name)))
-            )
+                self.options.get('backrefname', functionalize(self._column.owner.name)))
 
         if self.options.get('remote_side', None):
             attr.kwargs['remote_side'] = '[%s]' % self.options.get('remote_side', None)
@@ -254,10 +255,10 @@ class ColumnObject(object):
             attr.kwargs['nullable'] = False
         if self._column.autoIncrement == 1:
             attr.kwargs['autoincrement'] = True
-        if self.primary and self.name == 'id' and self._column.autoIncrement != 1:
+        if self.primary and self._column.autoIncrement != 1:
             attr.kwargs['autoincrement'] = False
         if self.primary:
-            attr.kwargs['primary'] = True
+            attr.kwargs['primary_key'] = True
         if self.unique:
             attr.kwargs['unique'] = True
         if self.index:
@@ -291,9 +292,14 @@ class TableObject(object):
         self.table_args = {}
         self.columns = []
 
-        self.uniques_multi = {index.name: [c.referencedColumn.name for c in index.columns]
-                              for index in self._table.indices
-                              if index.indexType == 'UNIQUE' and len(index.columns) > 1}
+        self.indices = defaultdict(set)
+        self.uniques_multi = defaultdict(set)
+
+        for index in self._table.indices:
+            columns = [c.referencedColumn.name for c in index.columns]
+            if index.indexType == 'UNIQUE' and len(index.columns) > 1:
+                self.uniques_multi[index.name].update(columns)
+            self.indices[index.indexType].update(columns)
 
         if len(self.uniques_multi):
             USED_TYPES.IMPORT_UNIQUE_CONSTRAINT = True
@@ -314,18 +320,13 @@ class TableObject(object):
 
     def _setColumns(self):
         for column in self._table.columns:
-            indices = {
-                index.indexType: [c.referencedColumn.name for c in index.columns]
-                for index in self._table.indices
-            }
-
             self.columns.append(ColumnObject(
                 column,
-                index=column.name in indices.get('INDEX', []),
-                primary=column.name in indices.get('PRIMARY', []),
-                unique=column.name in indices.get('UNIQUE', []) and
-                column.name not in [c for clist in self.uniques_multi.values()
-                                    for c in clist]
+                index=column.name in self.indices.get('INDEX', []),
+                primary=column.name in self.indices.get('PRIMARY', []),
+                unique=column.name in self.indices.get('UNIQUE', [])
+                and column.name not in [c for clist in self.uniques_multi.values()
+                                        for c in clist]
             ))
 
         # link columns together with foreign keys

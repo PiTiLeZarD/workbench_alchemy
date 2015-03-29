@@ -134,7 +134,7 @@ class TestColumnObject(unittest.TestCase):
         self.assertEquals('id', column_obj.name)
 
         self.assertEquals(
-            '    id = Column("id_something", INTEGER, autoincrement=False, primary=True)  # pylint: disable=invalid-name',
+            '    id = Column("id_something", INTEGER, autoincrement=False, primary_key=True)  # pylint: disable=invalid-name',
             str(column_obj)
         )
 
@@ -155,7 +155,9 @@ class TestColumnObject(unittest.TestCase):
         column_obj = ColumnObject(column, primary=True, unique=True, index=True)
 
         self.assertEquals(
-            '    test = Column(INTEGER, index=True, nullable=False, default="test", autoincrement=True, primary=True, unique=True)',
+            '    test = Column(\n'
+            '        INTEGER, index=True, primary_key=True, nullable=False, default="test", autoincrement=True, unique=True\n'
+            '    )',
             str(column_obj)
         )
 
@@ -180,7 +182,7 @@ class TestColumnObject(unittest.TestCase):
         column_obj.setForeignKey(foreign_key, column_ref_obj)
 
         self.assertEquals(
-            '    tableref = relationship("TableRef", foreign_keys=[test], backref="table")',
+            '    tableRef = relationship("TableRef", foreign_keys=[test], backref="tables")',
             column_obj.getBackref()
         )
 
