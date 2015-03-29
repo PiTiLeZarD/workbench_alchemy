@@ -6,8 +6,6 @@
 import grt
 import re
 
-# TODO: MultiUnique constraints
-# TODO: datetime/date/time default values and on update
 # TODO: comment on foreignkeys and generally place the options at the right place
 # TODO: update the docs so we can understand anything
 
@@ -138,6 +136,9 @@ class SqlaType(object):
         'INT': 'INTEGER',
     }
 
+    IMPORT_DATETIME = False
+    IMPORT_UNIQUE_CONSTRAINT = False
+
     def __init__(self):
         self.sqla = set()
         self.mysql = set()
@@ -190,7 +191,8 @@ class ColumnObject(object):
         if self.primary and primary_keys == 1 and self.name != 'id':
             self.name = 'id'
 
-        self.features = {}
+        if self._column.defaultValue and 'CURRENT_TIMESTAMP' in self._column.defaultValue:
+            USED_TYPES.IMPORT_DATETIME = True
 
     def setForeignKey(self, foreign_key, foreign_column):
         self.foreign_key = foreign_key
@@ -200,6 +202,9 @@ class ColumnObject(object):
         return self.options.get('toprint', 'True' if self.primary else 'False') == 'True'
 
     def getBackref(self):
+        if not self.foreign_key:
+            return None
+
         fktable = camelize(self.foreign_key.referencedColumns[0].owner.name)
         fkname = self.options.get('fkname', functionalize(singular(fktable)))
 
@@ -215,7 +220,9 @@ class ColumnObject(object):
         attr.kwargs['foreign_keys'] = '[%s]' % self.name
 
         if self.options.get('backref', True) != 'False':
-            attr.kwargs['backref'] = quote(self.options.get('backrefname', functionalize(singular(self._column.owner.name))))
+            attr.kwargs['backref'] = quote(
+                self.options.get('backrefname', functionalize(singular(self._column.owner.name)))
+            )
 
         if self.options.get('remote_side', None):
             attr.kwargs['remote_side'] = '[%s]' % self.options.get('remote_side', None)
@@ -256,14 +263,20 @@ class ColumnObject(object):
         if self.index:
             attr.kwargs['index'] = True
         if self._column.defaultValue:
-            attr.kwargs['default'] = self._column.defaultValue
+            default = self._column.defaultValue
+            onupdate = None
+            if "ON UPDATE" in default:
+                onupdate = default.split('ON UPDATE')[1].strip()
+                default = default.split('ON UPDATE')[0].strip()
+            if 'CURRENT_TIMESTAMP' in default:
+                default = 'datetime.datetime.utcnow'
+            if onupdate and 'CURRENT_TIMESTAMP' in onupdate:
+                onupdate = 'datetime.datetime.utcnow'
+            attr.kwargs['default'] = default
+            if onupdate:
+                attr.kwargs['onupdate'] = onupdate
         if self.name == 'id':
             attr.comment = 'pylint: disable=invalid-name'
-
-        # if self.foreign_key:
-        #     attr.args.append(self.foreign_key)
-
-        # attr.kwargs = self.features
 
         return str(attr)
 
@@ -276,8 +289,14 @@ class TableObject(object):
 
         self.comments = []
         self.table_args = {}
-        self.options = {}
         self.columns = []
+
+        self.uniques_multi = {index.name: [c.referencedColumn.name for c in index.columns]
+                              for index in self._table.indices
+                              if index.indexType == 'UNIQUE' and len(index.columns) > 1}
+
+        if len(self.uniques_multi):
+            USED_TYPES.IMPORT_UNIQUE_CONSTRAINT = True
 
         self._setTableArgs()
         self._setColumns()
@@ -304,7 +323,9 @@ class TableObject(object):
                 column,
                 index=column.name in indices.get('INDEX', []),
                 primary=column.name in indices.get('PRIMARY', []),
-                unique=column.name in indices.get('UNIQUE', [])
+                unique=column.name in indices.get('UNIQUE', []) and
+                column.name not in [c for clist in self.uniques_multi.values()
+                                    for c in clist]
             ))
 
         # link columns together with foreign keys
@@ -339,8 +360,12 @@ class TableObject(object):
             value.append(TAB + "__tablename__ = '%s'" % self._table.name)
 
         value.append(TAB + "__table_args__ = (")
-        # for index_name, columns in self.indices['UNIQUE_MULTI'].items():
-        #     value.append(TAB * 2 + "UniqueConstraint('%s', name='%s')," % ("', '".join(columns), index_name))
+        for index_name, columns in self.uniques_multi.iteritems():
+            attr = AttributeObject(None, 'UniqueConstraint')
+            attr.tab = TAB * 2
+            attr.args.append(quote(quote(', ').join(columns)))
+            attr.kwargs['name'] = quote(index_name)
+            value.append(str(attr) + ',')
         value.append(TAB * 2 + "%s" % self.table_args)
         value.append(TAB + ")")
 
@@ -381,10 +406,12 @@ export.append('"""')
 
 export.append("")
 export.append("import os")
+if USED_TYPES.IMPORT_DATETIME:
+    export.append("import datetime")
 export.append("from sqlalchemy.orm import relationship")
 export.append("from sqlalchemy import Column, ForeignKey")
-# if len([1 for t in tables if len(t.indices['UNIQUE_MULTI'])]):
-#     export.append("from sqlalchemy.schema import UniqueConstraint")
+if USED_TYPES.IMPORT_UNIQUE_CONSTRAINT:
+    export.append("from sqlalchemy.schema import UniqueConstraint")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
 export.append("")
 
