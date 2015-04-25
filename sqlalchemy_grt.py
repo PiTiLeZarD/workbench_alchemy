@@ -74,7 +74,7 @@ def pep8_list(data, tab='', first_row_pad=0):
 
 
 def options(string):
-    return dict([t.split('=') for t in string.split(',') if '=' in t])
+    return dict([t.split('=') for t in string.replace('“', '"').replace('”', '"').split(',') if '=' in t])
 
 
 class AttributeObject(object):
@@ -125,7 +125,8 @@ class SqlaType(object):
         'Timestamp': 'DateTime',
         'Datetime': 'DateTime',
         'Double': 'Float',
-        'Blob': 'String',
+        'Blob': 'Binary',
+        'Longblob': 'Binary',
     }
 
     RAW_TYPE_MAP = {
@@ -139,6 +140,7 @@ class SqlaType(object):
 
     IMPORT_DATETIME = False
     IMPORT_UNIQUE_CONSTRAINT = False
+    MIXINS = set()
 
     def __init__(self):
         self.sqla = set()
@@ -240,10 +242,14 @@ class ColumnObject(object):
 
         if self.foreign_key:
             fk = AttributeObject(None, 'ForeignKey')
+
             fk.args.append(quote("%s.%s" % (
                 self.foreign_key.referencedColumns[0].owner.name,
                 self.foreign_key.referencedColumns[0].name
             )))
+            fk.kwargs['name'] = quote(self.foreign_key.name)
+            if self.options.get('use_alter', False) == 'True':
+                fk.kwargs['use_alter'] = 'True'
             if self.foreign_key.deleteRule and self.foreign_key.deleteRule != "NO ACTION":
                 fk.kwargs['ondelete'] = quote(self.foreign_key.deleteRule)
             if self.foreign_key.updateRule and self.foreign_key.updateRule != "NO ACTION":
@@ -288,6 +294,7 @@ class TableObject(object):
         self._table = table
         self.name = singular(camelize(table.name))
 
+        self.options = options(table.comment)
         self.comments = []
         self.table_args = {}
         self.columns = []
@@ -303,6 +310,9 @@ class TableObject(object):
 
         if len(self.uniques_multi):
             USED_TYPES.IMPORT_UNIQUE_CONSTRAINT = True
+
+        if 'mixins' in self.options:
+            USED_TYPES.MIXINS.update(self.options['mixins'].split(','))
 
         self._setTableArgs()
         self._setColumns()
@@ -350,9 +360,12 @@ class TableObject(object):
     def __str__(self):
         value = []
 
+        inherits_from = ['object' if self.options.get('abstract', 'False') == 'True' else 'DECLARATIVE_BASE']
+        if 'mixins' in self.options:
+            inherits_from.extend(self.options['mixins'].split(','))
         value.append("class %s(%s):" % (
             self.name,
-            'object' if 'abstract' in self._table.comment else 'DECLARATIVE_BASE'
+            ', '.join(inherits_from)
         ))
         for comment in self.comments:
             value.append(TAB + '# %s' % comment)
@@ -405,6 +418,22 @@ export.append('For more details please check here:')
 export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
 export.append('"""')
 
+
+def append_types(types, from_import, tab=TAB):
+    lines = []
+    if not len(types):
+        return lines
+    from_import = "from %s import" % from_import
+    types = pep8_list(types, first_row_pad=len(tab) + len(from_import))
+    lines.append(tab + "%s %s" % (from_import, types[0]))
+    if len(types) > 1:
+        lines[-1] += ' \\'
+    for index in range(1, len(types)):
+        lines.append(tab * 2 + types[index])
+        if index < len(types) - 1:
+            lines[-1] += ' \\'
+    return lines
+
 export.append("")
 export.append("import os")
 if USED_TYPES.IMPORT_DATETIME:
@@ -414,23 +443,9 @@ export.append("from sqlalchemy import Column, ForeignKey")
 if USED_TYPES.IMPORT_UNIQUE_CONSTRAINT:
     export.append("from sqlalchemy.schema import UniqueConstraint")
 export.append("from sqlalchemy.ext.declarative import declarative_base")
+if len(USED_TYPES.MIXINS):
+    export = export + append_types(USED_TYPES.MIXINS, '.mixins', tab='')
 export.append("")
-
-
-def append_types(types, from_import):
-    lines = []
-    if not len(types):
-        return lines
-    from_import = "from %s import" % from_import
-    types = pep8_list(types, first_row_pad=len(TAB) + len(from_import))
-    lines.append(TAB + "%s %s" % (from_import, types[0]))
-    if len(types) > 1:
-        lines[-1] += ' \\'
-    for index in range(1, len(types)):
-        lines.append(TAB * 2 + types[index])
-        if index < len(types) - 1:
-            lines[-1] += ' \\'
-    return lines
 
 
 export.append("if os.environ.get('DB_TYPE', 'MySQL') == 'MySQL':")
@@ -443,6 +458,12 @@ if 'Integer' in USED_TYPES.sqla:
     export.append("        def __init__(self, *args, **kwargs):")
     export.append("            super(Integer, self).__init__()  # pylint: disable=bad-super-call")
     export.append("")
+
+    if 'TINYINT' in USED_TYPES.mysql:
+        export.append("    TINYINT = INTEGER")
+
+    if 'BIGINT' in USED_TYPES.mysql:
+        export.append("    BIGINT = INTEGER")
 
 export.append("")
 export.append("DECLARATIVE_BASE = declarative_base()")
