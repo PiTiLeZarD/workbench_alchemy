@@ -253,3 +253,14 @@ mkvirtualenv workbench_alchemy
 pip install nose mock
 nosetests tests.py
 ```
+
+If you want coverage:
+```
+pip install coverage
+nosetests --with-coverage tests.py 2>&1 | grep sqlalchemy
+```
+
+Which currently outputs:
+```
+sqlalchemy_grt.py                  325    114    65%
+```

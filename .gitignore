@@ -1,3 +1,6 @@
 *.bak
 *.pyc
 *.sublime-*
+
+cover/
+.coverage
