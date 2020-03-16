@@ -32,40 +32,41 @@ This:
 
 On execution it should look like this:
 ```
-Executing script /Users/xxx/Library/Application Support/MySQL/Workbench/scripts/sqlalchemy_grt.py...
+> run
  -> Working on customers
  -> Working on localities
  -> Working on invoices
 --------------------
--- SQLAlchemy export v0.2.2
+-- SQLAlchemy export v0.3
 --------------------
 Copied to clipboard
-
-Script finished.
+Execution finished
 ```
 
 Then you just have to paste it somewhere, hopefully it looks like this:
 
 ```python
 """
-This file has been automatically generated with workbench_alchemy v0.2.2
+This file has been automatically generated with workbench_alchemy v0.3
 For more details please check here:
 https://github.com/PiTiLeZarD/workbench_alchemy
 """
 
 import os
+import datetime
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, ForeignKey
+from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 
 if os.environ.get('DB_TYPE', 'MySQL') == 'MySQL':
-    from sqlalchemy.dialects.mysql import INTEGER, VARCHAR, FLOAT
+    from sqlalchemy.dialects.mysql import INTEGER, FLOAT, VARCHAR, DATETIME
 else:
-    from sqlalchemy import Integer, String as VARCHAR, Float as FLOAT
+    from sqlalchemy import DateTime as DATETIME, Integer, Float as FLOAT, String as VARCHAR
 
     class INTEGER(Integer):
         def __init__(self, *args, **kwargs):
-            super(Integer, self).__init__()
+            super(Integer, self).__init__()  # pylint: disable=bad-super-call
 
 
 DECLARATIVE_BASE = declarative_base()
@@ -75,16 +76,24 @@ class Customer(DECLARATIVE_BASE):
 
     __tablename__ = 'customers'
     __table_args__ = (
+        UniqueConstraint("name", "email", name="index2"),
         {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'}
     )
 
-    id = Column("id_customer", INTEGER, primary_key=True, nullable=False)  # pylint: disable=invalid-name
-    name = Column(VARCHAR(45), index=True)
-    id_locality = Column(
-        "locality_id", INTEGER, ForeignKey("localities.id_locality", ondelete="CASCADE"), index=True, nullable=False
+    id = Column(  # pylint: disable=invalid-name
+        "id_customer", INTEGER(unsigned=True), autoincrement=False, primary_key=True, nullable=False
     )
+    id_locality = Column(
+        "locality_id", INTEGER(unsigned=True),
+        ForeignKey("localities.id_locality", ondelete="CASCADE", name="fk_customers_localities"), index=True,
+        nullable=False
+    )
+    name = Column(VARCHAR(45))
+    email = Column(VARCHAR(45))
+    date_created = Column(DATETIME, default=datetime.datetime.utcnow)
+    date_updated = Column(DATETIME, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-    locality = relationship("Locality", foreign_keys=[id_locality])
+    locality = relationship("Locality", foreign_keys=[id_locality], backref="customers")
 
     def __repr__(self):
         return self.__str__()
@@ -100,8 +109,10 @@ class Locality(DECLARATIVE_BASE):
         {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'}
     )
 
-    id = Column("id_locality", INTEGER, primary_key=True, nullable=False)  # pylint: disable=invalid-name
-    name = Column(VARCHAR(45))
+    id = Column(  # pylint: disable=invalid-name
+        "id_locality", INTEGER(unsigned=True), autoincrement=False, primary_key=True, nullable=False
+    )
+    name = Column(VARCHAR(45), unique=True)
 
     def __repr__(self):
         return self.__str__()
@@ -117,17 +128,23 @@ class Invoice(DECLARATIVE_BASE):
         {'mysql_engine': 'InnoDB', 'sqlite_autoincrement': True, 'mysql_charset': 'utf8'}
     )
 
-    id = Column(INTEGER, autoincrement=True, primary_key=True, nullable=False)  # pylint: disable=invalid-name
+    id = Column(  # pylint: disable=invalid-name
+        INTEGER(unsigned=True), autoincrement=True, primary_key=True, nullable=False
+    )
+    id_customer = Column(
+        INTEGER(unsigned=True), ForeignKey("customers.id_customer", name="fk_invoices_customers1"), index=True,
+        nullable=False
+    )
     total = Column("amount", FLOAT)
-    id_customer = Column(INTEGER, ForeignKey("customers.id_customer"), index=True, nullable=False)
 
-    test = relationship("Customer", foreign_keys=[id_customer], backref="testbackrefs")
+    customer = relationship("Customer", foreign_keys=[id_customer], backref="invoices")
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
-        return "<Invoice(%(total)s, %(id)s)>" % self.__dict__
+        return "<Invoice(%(id)s, %(total)s)>" % self.__dict__
+
 ```
 
 ### List of options
