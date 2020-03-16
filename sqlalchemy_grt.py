@@ -32,7 +32,7 @@ def functionalize(name):
 
 
 def quote(s):
-    return '"%s"' % s
+    return '"{s}"'.format(s=s)
 
 
 def endsWith(name, all):
@@ -91,7 +91,11 @@ class AttributeObject(object):
         comment = '' if not self.comment else '  # %s' % self.comment
         # simple case
         if not len(self.args) and not len(self.kwargs):
-            return self.tab + "%s%s()%s" % (name, self.classname, comment)
+            return self.tab + "{name}{classname}(){comment}".format(
+                name=name,
+                classname=self.classname,
+                comment=comment
+            )
 
         # condensed
         arguments = ", ".join(self.args)
@@ -99,12 +103,21 @@ class AttributeObject(object):
             arguments += ', '
         if len(self.kwargs):
             arguments += ", ".join(['%s=%s' % item for item in self.kwargs.items()])
-        value = self.tab + "%s%s(%s)%s" % (name, self.classname, arguments, comment)
+        value = self.tab + "{name}{classname}({arguments}){comment}".format(
+            name=name,
+            classname=self.classname,
+            arguments=arguments,
+            comment=comment
+        )
         if len(value) < PEP8_LIMIT:
             return value
 
         value = []
-        value.append(self.tab + "%s%s(%s" % (name, self.classname, comment))
+        value.append(self.tab + "{name}{classname}({comment}".format(
+            name=name,
+            classname=self.classname,
+            comment=comment
+        ))
 
         value.extend(pep8_list(
             self.args + ['%s=%s' % item for item in self.kwargs.items()],
@@ -221,15 +234,15 @@ class ColumnObject(object):
 
         attr.args.append(quote(singular(fktable)))
 
-        attr.kwargs['foreign_keys'] = '[%s]' % self.name
+        attr.kwargs['foreign_keys'] = '[{name}]'.format(name=self.name)
 
         if self.options.get('backref', True) != 'False':
             attr.kwargs['backref'] = quote(
-                self.options.get('backrefname', functionalize(self._column.owner.name)))
+                self.options.get('backrefname', functionalize(self._column.owner.name))
+            )
 
         if self.options.get('remote_side', None):
             attr.kwargs['remote_side'] = '[%s]' % self.options.get('remote_side', None)
-
         return str(attr)
 
     def __str__(self):
@@ -247,6 +260,7 @@ class ColumnObject(object):
                 self.foreign_key.referencedColumns[0].owner.name,
                 self.foreign_key.referencedColumns[0].name
             )))
+
             fk.kwargs['name'] = quote(self.foreign_key.name)
             if self.options.get('use_alter', False) == 'True':
                 fk.kwargs['use_alter'] = 'True'
@@ -408,7 +422,7 @@ USED_TYPES = SqlaType()
 
 tables = []
 for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
-    print " -> Working on %s" % table.name
+    print(" -> Working on %s" % table.name)
     tables.append(TableObject(table))
 
 export = []
@@ -475,7 +489,7 @@ for table in tables:
     export.append("")
 
 grt.modules.Workbench.copyToClipboard('\n'.join(export))
-print "-" * 20
-print "-- SQLAlchemy export v%s" % VERSION
-print "-" * 20
-print "Copied to clipboard"
+print("-" * 20)
+print("-- SQLAlchemy export v%s" % VERSION)
+print("-" * 20)
+print("Copied to clipboard")

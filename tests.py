@@ -67,9 +67,8 @@ class TestAttributeObject(unittest.TestCase):
         })
         expected = [
             '    test = Test(  # pylint-test',
-            '        "qwertyuiop", asdfghjkl, zxcvbnm, poiuytrew, qwertyui, sdljfsdf=12, eoripu="ewiu",',
-            '        cxmvbxcvmnb="sdkjhflknslkfwelcwiemoimcoiwemc", sldkjfasdf="ewuhofnocnwoedsf", '
-            's230948d="ewuhofnocnwoedsf"',
+            '        "qwertyuiop", asdfghjkl, zxcvbnm, poiuytrew, qwertyui, sdljfsdf=12, sldkjfasdf="ewuhofnocnwoedsf",',
+            '        eoripu="ewiu", cxmvbxcvmnb="sdkjhflknslkfwelcwiemoimcoiwemc", s230948d="ewuhofnocnwoedsf"',
             '    )'
         ]
         self.assertEquals('\n'.join(expected), str(attr))
@@ -156,7 +155,7 @@ class TestColumnObject(unittest.TestCase):
 
         self.assertEquals(
             '    test = Column(\n'
-            '        INTEGER, index=True, primary_key=True, nullable=False, default="test", autoincrement=True, unique=True\n'
+            '        INTEGER, nullable=False, autoincrement=True, primary_key=True, unique=True, index=True, default="test"\n'
             '    )',
             str(column_obj)
         )
@@ -176,9 +175,9 @@ class TestColumnObject(unittest.TestCase):
         column_ref_obj = ColumnObject(column_ref)
 
         foreign_key = MagicMock(referencedColumns=[column_ref])
+        foreign_key.name = 'fk_test'
         foreign_key.deleteRule = 'NO ACTION'
         foreign_key.updateRule = 'SET NULL'
-
         column_obj.setForeignKey(foreign_key, column_ref_obj)
 
         self.assertEquals(
@@ -187,7 +186,7 @@ class TestColumnObject(unittest.TestCase):
         )
 
         self.assertEquals(
-            '    test = Column(INTEGER, ForeignKey("table_refs.ref", onupdate="SET NULL"))',
+            '    test = Column(INTEGER, ForeignKey("table_refs.ref", name="fk_test", onupdate="SET NULL"))',
             str(column_obj)
         )
 
