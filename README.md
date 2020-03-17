@@ -1,4 +1,5 @@
-** Disclaimer **
+Disclaimer
+==========
 
 After years of inactivity, I found myself needing this project again. I'm surprised it still kinda works.
 
