@@ -3,7 +3,7 @@ import unittest
 from mock import MagicMock, patch
 
 from sqlalchemy_grt import AttributeObject, ColumnObject, camelize, functionalize, quote, endsWith, \
-    singular, SqlaType
+    singular, SqlaType, TableObject
 
 
 class TestUtils(unittest.TestCase):
@@ -256,5 +256,45 @@ class TestColumnObject(unittest.TestCase):
 
 class TestTableObject(unittest.TestCase):
 
-    def test_00(self):
-        pass
+    def test_basics(self):
+        id_col = MagicMock(defaultValue=None, isNotNull=1, autoIncrement=1, formattedType="INT(16)")
+        id_col.name = 'id'
+        primary_indx = MagicMock(
+            columns=[
+                MagicMock(referencedColumn=id_col)
+            ],
+            indexType='PRIMARY'
+        )
+
+        name_col = MagicMock(defaultValue=None, isNotNull=1, autoIncrement=0, formattedType="VARCHAR(145)")
+        name_col.name = 'name'
+
+        description_col = MagicMock(defaultValue=None, autoIncrement=0, formattedType="BLOB")
+        description_col.name = 'description'
+
+
+        table_mock = MagicMock(tableEngine=None, defaultCharacterSetName='utf8')
+        table_mock.name = 'table_test'
+        table_mock.columns = [id_col, name_col, description_col]
+        table_mock.indices = [primary_indx]
+        table = TableObject(table_mock)
+
+        self.assertEquals(
+            'class TableTest(DECLARATIVE_BASE):\n'
+            '\n'
+            '    __tablename__ = \'table_test\'\n'
+            '    __table_args__ = (\n'
+            '        {\'mysql_charset\': \'utf8\', \'sqlite_autoincrement\': True}\n'
+            '    )\n'
+            '\n'
+            '    id = Column(INTEGER, nullable=False, autoincrement=True, primary_key=True)  # pylint: disable=invalid-name\n'
+            '    name = Column(VARCHAR(145), nullable=False)\n'
+            '    description = Column(BLOB)\n'
+            '\n'
+            '    def __repr__(self):\n'
+            '        return self.__str__()\n'
+            '\n'
+            '    def __str__(self):\n'
+            '        return "<TableTest(%(id)s)>" % self.__dict__',
+            str(table)
+        )
