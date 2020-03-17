@@ -99,6 +99,20 @@ class TestGetType(unittest.TestCase):
         self.assertEquals(1, len(obj.mysql))
         self.assertEquals(1, len(obj.sqla))
 
+
+    def test_var(self):
+        obj = SqlaType()
+        self.assertEquals(0, len(obj.mysql))
+        self.assertEquals(0, len(obj.sqla))
+
+        varchar_type = MagicMock(formattedType='VARCHAR(45)')
+        self.assertEquals('VARCHAR(45)', obj.get(varchar_type))
+        self.assertEquals(1, len(obj.mysql))
+        self.assertEquals(1, len(obj.sqla))
+
+        self.assertEquals('VARCHAR', list(obj.mysql)[0])
+        self.assertEquals('String as VARCHAR', list(obj.sqla)[0])
+
     def test_bool(self):
         obj = SqlaType()
         self.assertEquals(0, len(obj.mysql))
@@ -146,6 +160,15 @@ class TestColumnObject(unittest.TestCase):
         self.assertEquals('    test = Column("test_column", String)', str(column_obj))
 
     @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
+    def test_datetime(self, get_type_mock):
+        get_type_mock.return_value = 'Datetime'
+        column = MagicMock(comment='alias=test', defaultValue=None)
+        column.name = 'test_column'
+        column.defaultValue = 'CURRENT_TIMESTAMP'
+        column_obj = ColumnObject(column)
+        self.assertEquals('    test = Column("test_column", Datetime, default=datetime.datetime.utcnow)', str(column_obj))
+
+    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
     def test_few_options(self, get_type_mock):
         get_type_mock.return_value = 'INTEGER'
         column = MagicMock(defaultValue='"test"', isNotNull=1, autoIncrement=1)
@@ -164,7 +187,7 @@ class TestColumnObject(unittest.TestCase):
     def test_backref(self, get_type_mock):
         get_type_mock.return_value = 'INTEGER'
 
-        column = MagicMock(owner=MagicMock(), defaultValue=None)
+        column = MagicMock(owner=MagicMock(), defaultValue=None, comment="remote_side=remote_test")
         column.name = 'test'
         column.owner.name = 'tables'
         column_obj = ColumnObject(column)
@@ -174,6 +197,8 @@ class TestColumnObject(unittest.TestCase):
         column_ref.owner.name = 'table_refs'
         column_ref_obj = ColumnObject(column_ref)
 
+        self.assertIsNone(column_obj.getBackref())
+
         foreign_key = MagicMock(referencedColumns=[column_ref])
         foreign_key.name = 'fk_test'
         foreign_key.deleteRule = 'NO ACTION'
@@ -181,7 +206,7 @@ class TestColumnObject(unittest.TestCase):
         column_obj.setForeignKey(foreign_key, column_ref_obj)
 
         self.assertEquals(
-            '    tableRef = relationship("TableRef", foreign_keys=[test], backref="tables")',
+            '    tableRef = relationship("TableRef", foreign_keys=[test], backref="tables", remote_side=[remote_test])',
             column_obj.getBackref()
         )
 
@@ -189,6 +214,31 @@ class TestColumnObject(unittest.TestCase):
             '    test = Column(INTEGER, ForeignKey("table_refs.ref", name="fk_test", onupdate="SET NULL"))',
             str(column_obj)
         )
+
+
+    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
+    def test_backref_ignore(self, get_type_mock):
+        get_type_mock.return_value = 'INTEGER'
+
+        column = MagicMock(owner=MagicMock(), defaultValue=None, comment="relation=False")
+        column.name = 'test'
+        column.owner.name = 'tables'
+        column_obj = ColumnObject(column)
+
+        column_ref = MagicMock(owner=MagicMock())
+        column_ref.name = 'ref'
+        column_ref.owner.name = 'table_refs'
+        column_ref_obj = ColumnObject(column_ref)
+
+        self.assertIsNone(column_obj.getBackref())
+
+        foreign_key = MagicMock(referencedColumns=[column_ref])
+        foreign_key.name = 'fk_test'
+        foreign_key.deleteRule = 'NO ACTION'
+        foreign_key.updateRule = 'SET NULL'
+        column_obj.setForeignKey(foreign_key, column_ref_obj)
+
+        self.assertEquals('    # relation <tableRef/tables> ignored for this table', column_obj.getBackref())
 
 
 class TestTableObject(unittest.TestCase):

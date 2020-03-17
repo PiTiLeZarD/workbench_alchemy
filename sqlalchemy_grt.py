@@ -224,10 +224,10 @@ class ColumnObject(object):
         fktable = self.foreign_key.referencedColumns[0].owner.name
         fkname = self.options.get('fkname', functionalize(singular(fktable)))
         fktable = camelize(fktable)
+        backrefname = functionalize(self._column.owner.name)
 
         if self.options.get('relation', True) == 'False':
-            self.comments.append("relation <%s/%s> ignored for this table" % (fkname, fkname))
-            return None
+            return TAB + "# relation <%s/%s> ignored for this table" % (fkname, backrefname)
 
         attr = AttributeObject(fkname, 'relationship')
         attr.tab = TAB
@@ -238,7 +238,7 @@ class ColumnObject(object):
 
         if self.options.get('backref', True) != 'False':
             attr.kwargs['backref'] = quote(
-                self.options.get('backrefname', functionalize(self._column.owner.name))
+                self.options.get('backrefname', backrefname)
             )
 
         if self.options.get('remote_side', None):
