@@ -167,6 +167,11 @@ class TestColumnObject(unittest.TestCase):
         column.defaultValue = 'CURRENT_TIMESTAMP'
         column_obj = ColumnObject(column)
         self.assertEquals('    test = Column("test_column", Datetime, default=datetime.datetime.utcnow)', str(column_obj))
+        column.defaultValue = 'CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+        self.assertEquals(
+            '    test = Column("test_column", Datetime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)',
+            str(column_obj)
+        )
 
     @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
     def test_few_options(self, get_type_mock):
@@ -187,7 +192,7 @@ class TestColumnObject(unittest.TestCase):
     def test_backref(self, get_type_mock):
         get_type_mock.return_value = 'INTEGER'
 
-        column = MagicMock(owner=MagicMock(), defaultValue=None, comment="remote_side=remote_test")
+        column = MagicMock(owner=MagicMock(), defaultValue=None, comment="remote_side=remote_test,use_alter=True")
         column.name = 'test'
         column.owner.name = 'tables'
         column_obj = ColumnObject(column)
@@ -211,7 +216,15 @@ class TestColumnObject(unittest.TestCase):
         )
 
         self.assertEquals(
-            '    test = Column(INTEGER, ForeignKey("table_refs.ref", name="fk_test", onupdate="SET NULL"))',
+            '    test = Column(INTEGER, ForeignKey("table_refs.ref", name="fk_test", use_alter=True, onupdate="SET NULL"))',
+            str(column_obj)
+        )
+        foreign_key.deleteRule = 'CASCADE'
+        column_obj.setForeignKey(foreign_key, column_ref_obj)
+        self.assertEquals(
+            '    test = Column(\n'
+            '        INTEGER, ForeignKey("table_refs.ref", name="fk_test", use_alter=True, ondelete="CASCADE", onupdate="SET NULL")\n'
+            '    )',
             str(column_obj)
         )
 
