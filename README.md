@@ -272,5 +272,5 @@ nosetests --with-coverage tests.py 2>&1 | grep sqlalchemy
 
 Which currently outputs:
 ```
-sqlalchemy_grt.py                  325    114    65%
+sqlalchemy_grt.py                  325     19    94%
 ```
