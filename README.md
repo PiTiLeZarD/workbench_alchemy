@@ -1,6 +1,15 @@
-Warning: this project is currently being rebuilt. I originally developped it the messy way discovering the grt api and the need of the 
-company I was working for, now I clean everything, make it more maintainable and I will write tests and all... So if you plan on using 
-be aware that few things might change in the futue, I'll provide more details when it's ready.
+** Disclaimer **
+
+After years of inactivity, I found myself needing this project again. I'm surprised it still kinda works.
+
+Here is the plan:
+ - Increase test coverage up to the point I'm confident that what should work, still works
+ - Add documentation around all of these objects I have
+ - More PEP8 and Python3 updates
+ - Check the workbench GRT changelog to see what I can simplify/add/remove
+ - Check the sqlalchemy changelog and do the same thing
+ - Test it all in a real project to see if it's still usable
+
 
 
 workbench_alchemy
