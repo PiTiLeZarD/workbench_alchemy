@@ -7,9 +7,6 @@ import grt
 import re
 from collections import defaultdict
 
-# TODO: comment on foreignkeys and generally place the options at the right place
-# TODO: update the docs so we can understand anything
-
 VERSION = '0.3'
 
 TAB = "    "
