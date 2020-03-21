@@ -5,6 +5,8 @@ from mock import MagicMock, patch
 from sqlalchemy_grt import AttributeObject, ColumnObject, camelize, functionalize, quote, endsWith, \
     singular, SqlaType, TableObject
 
+from grt import get_grt_foreignKey, get_grt_column, get_grt_index, get_grt_table
+
 
 class TestUtils(unittest.TestCase):
 
@@ -134,15 +136,9 @@ class TestGetType(unittest.TestCase):
 
 class TestColumnObject(unittest.TestCase):
 
-    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
-    def test_name_switch_primary_key(self, get_type_mock):
-        get_type_mock.return_value = 'INTEGER'
-        column = MagicMock(owner=MagicMock(indices=[MagicMock(
-            columns=['id_something'],
-            indexType='PRIMARY'
-        )]), defaultValue=None)
-        column.name = 'id_something'
-
+    def test_name_switch_primary_key(self):
+        column = get_grt_column('id_something', 'table_test', 'INTEGER')
+        column.owner.indices.append(get_grt_index(columns=[column]))
         column_obj = ColumnObject(column, primary=True)
         self.assertEquals('id', column_obj.name)
 
@@ -151,64 +147,46 @@ class TestColumnObject(unittest.TestCase):
             str(column_obj)
         )
 
-    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
-    def test_basic(self, get_type_mock):
-        get_type_mock.return_value = 'String'
-        column = MagicMock(comment='alias=test', defaultValue=None)
-        column.name = 'test_column'
-        column_obj = ColumnObject(column)
-        self.assertEquals('    test = Column("test_column", String)', str(column_obj))
+    def test_basic(self):
+        column_obj = ColumnObject(
+            get_grt_column('test_column', 'test_table', 'VARCHAR(45)', comment='alias=test')
+        )
 
-    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
-    def test_datetime(self, get_type_mock):
-        get_type_mock.return_value = 'Datetime'
-        column = MagicMock(comment='alias=test', defaultValue=None)
-        column.name = 'test_column'
-        column.defaultValue = 'CURRENT_TIMESTAMP'
-        column_obj = ColumnObject(column)
-        self.assertEquals('    test = Column("test_column", Datetime, default=datetime.datetime.utcnow)', str(column_obj))
-        column.defaultValue = 'CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+        self.assertEquals('    test = Column("test_column", VARCHAR(45))', str(column_obj))
+
+    def test_datetime(self):
+        column_obj = ColumnObject(
+            get_grt_column('test_column', 'test_table', 'DATETIME', defaultValue='CURRENT_TIMESTAMP', comment='alias=test')
+        )
+
+        self.assertEquals('    test = Column("test_column", DATETIME, default=datetime.datetime.utcnow)', str(column_obj))
+        column_obj._column.defaultValue = 'CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
         self.assertEquals(
-            '    test = Column("test_column", Datetime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)',
+            '    test = Column("test_column", DATETIME, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)',
             str(column_obj)
         )
 
-    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
-    def test_few_options(self, get_type_mock):
-        get_type_mock.return_value = 'INTEGER'
-        column = MagicMock(defaultValue='"test"', isNotNull=1, autoIncrement=1)
-        column.name = 'test'
-
+    def test_few_options(self):
+        column = get_grt_column('test', 'test', 'INTEGER', defaultValue='1234567890', isNotNull=1, autoIncrement=1)
         column_obj = ColumnObject(column, primary=True, unique=True, index=True)
 
         self.assertEquals(
             '    test = Column(\n'
-            '        INTEGER, nullable=False, autoincrement=True, primary_key=True, unique=True, index=True, default="test"\n'
+            '        INTEGER, nullable=False, autoincrement=True, primary_key=True, unique=True, index=True, default=1234567890\n'
             '    )',
             str(column_obj)
         )
 
-    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
-    def test_backref(self, get_type_mock):
-        get_type_mock.return_value = 'INTEGER'
+    def test_backref(self):
+        column_obj = ColumnObject(
+            get_grt_column('test', 'tables', 'INTEGER', comment="remote_side=remote_test,use_alter=True")
+        )
 
-        column = MagicMock(owner=MagicMock(), defaultValue=None, comment="remote_side=remote_test,use_alter=True")
-        column.name = 'test'
-        column.owner.name = 'tables'
-        column_obj = ColumnObject(column)
-
-        column_ref = MagicMock(owner=MagicMock())
-        column_ref.name = 'ref'
-        column_ref.owner.name = 'table_refs'
-        column_ref_obj = ColumnObject(column_ref)
+        column_ref = get_grt_column('ref', 'table_refs', 'INTEGER')
 
         self.assertIsNone(column_obj.getBackref())
 
-        foreign_key = MagicMock(referencedColumns=[column_ref])
-        foreign_key.name = 'fk_test'
-        foreign_key.deleteRule = 'NO ACTION'
-        foreign_key.updateRule = 'SET NULL'
-        column_obj.setForeignKey(foreign_key, column_ref_obj)
+        column_obj.setForeignKey(get_grt_foreignKey('fk_test', referencedColumns=[column_ref]))
 
         self.assertEquals(
             '    tableRef = relationship("TableRef", foreign_keys=[test], backref="tables", remote_side=[remote_test])',
@@ -219,8 +197,7 @@ class TestColumnObject(unittest.TestCase):
             '    test = Column(INTEGER, ForeignKey("table_refs.ref", name="fk_test", use_alter=True, onupdate="SET NULL"))',
             str(column_obj)
         )
-        foreign_key.deleteRule = 'CASCADE'
-        column_obj.setForeignKey(foreign_key, column_ref_obj)
+        column_obj.foreign_key.deleteRule = 'CASCADE'
         self.assertEquals(
             '    test = Column(\n'
             '        INTEGER, ForeignKey("table_refs.ref", name="fk_test", use_alter=True, ondelete="CASCADE", onupdate="SET NULL")\n'
@@ -229,55 +206,32 @@ class TestColumnObject(unittest.TestCase):
         )
 
 
-    @patch("sqlalchemy_grt.SqlaType.get", autospec=True)
-    def test_backref_ignore(self, get_type_mock):
-        get_type_mock.return_value = 'INTEGER'
-
-        column = MagicMock(owner=MagicMock(), defaultValue=None, comment="relation=False")
-        column.name = 'test'
-        column.owner.name = 'tables'
-        column_obj = ColumnObject(column)
-
-        column_ref = MagicMock(owner=MagicMock())
-        column_ref.name = 'ref'
-        column_ref.owner.name = 'table_refs'
-        column_ref_obj = ColumnObject(column_ref)
+    def test_backref_ignore(self):
+        column_obj = ColumnObject(get_grt_column('test', 'tables', 'INTEGER', comment="relation=False"))
+        column_ref = get_grt_column('ref', 'table_refs', 'INTEGER')
 
         self.assertIsNone(column_obj.getBackref())
 
-        foreign_key = MagicMock(referencedColumns=[column_ref])
-        foreign_key.name = 'fk_test'
-        foreign_key.deleteRule = 'NO ACTION'
-        foreign_key.updateRule = 'SET NULL'
-        column_obj.setForeignKey(foreign_key, column_ref_obj)
+        column_obj.setForeignKey(get_grt_foreignKey('fk_test', referencedColumns=[column_ref]))
 
-        self.assertEquals('    # relation <tableRef/tables> ignored for this table', column_obj.getBackref())
+        self.assertEquals(
+            '    # relation for test.ForeignKey ignored as configured in column comment',
+            column_obj.getBackref()
+        )
 
 
 class TestTableObject(unittest.TestCase):
 
     def test_basics(self):
-        id_col = MagicMock(defaultValue=None, isNotNull=1, autoIncrement=1, formattedType="INT(16)")
-        id_col.name = 'id'
-        primary_indx = MagicMock(
-            columns=[
-                MagicMock(referencedColumn=id_col)
-            ],
-            indexType='PRIMARY'
+        id_col = get_grt_column('id', 'table_test', 'INT(16)', isNotNull=1, autoIncrement=1)
+        name_col = get_grt_column('name', 'table_test', 'VARCHAR(145)', isNotNull=1)
+        description_col = get_grt_column('description', 'table_test', 'BLOB')
+
+        table = get_grt_table(
+            'table_test',
+            columns=[id_col, name_col, description_col],
+            indices=[get_grt_index(columns=[id_col])]
         )
-
-        name_col = MagicMock(defaultValue=None, isNotNull=1, autoIncrement=0, formattedType="VARCHAR(145)")
-        name_col.name = 'name'
-
-        description_col = MagicMock(defaultValue=None, autoIncrement=0, formattedType="BLOB")
-        description_col.name = 'description'
-
-
-        table_mock = MagicMock(tableEngine=None, defaultCharacterSetName='utf8')
-        table_mock.name = 'table_test'
-        table_mock.columns = [id_col, name_col, description_col]
-        table_mock.indices = [primary_indx]
-        table = TableObject(table_mock)
 
         self.assertEquals(
             'class TableTest(DECLARATIVE_BASE):\n'
@@ -296,5 +250,69 @@ class TestTableObject(unittest.TestCase):
             '\n'
             '    def __str__(self):\n'
             '        return "<TableTest(%(id)s)>" % self.__dict__',
-            str(table)
+            str(TableObject(table))
+        )
+
+    def test_with_foreignkeys(self):
+        id_col = get_grt_column('id', 'table_test', 'INT(16)', isNotNull=1, autoIncrement=1)
+
+        id_other_ref = get_grt_column('id', 'table_test_other', 'INT(16)', isNotNull=1)
+
+        id_other = get_grt_column('id_other', 'table_test', 'INT(16)', isNotNull=1)
+        id_other2 = get_grt_column('id_other2', 'table_test', 'INT(16)', isNotNull=1, comment="relation=False")
+        id_other3 = get_grt_column('id_other3', 'table_test', 'INT(16)', isNotNull=1, comment="backref=False")
+        id_other4 = get_grt_column('id_other4', 'table_test', 'INT(16)', isNotNull=1, comment="remote_side='alias'")
+        id_other5 = get_grt_column('id_other5', 'table_test', 'INT(16)', isNotNull=1, comment="backrefname=newbr")
+
+        table = get_grt_table(
+            'table_test',
+            columns=[id_col, id_other, id_other2, id_other3, id_other4, id_other5],
+            indices=[get_grt_index(columns=[id_col])],
+            foreignKeys=[
+                get_grt_foreignKey('fk_id_other', columns=[id_other], referencedColumns=[id_other_ref]),
+                get_grt_foreignKey('fk_id_other2', columns=[id_other2], referencedColumns=[id_other_ref]),
+                get_grt_foreignKey('fk_id_other3', columns=[id_other3], referencedColumns=[id_other_ref]),
+                get_grt_foreignKey('fk_id_other4', columns=[id_other4], referencedColumns=[id_other_ref]),
+                get_grt_foreignKey('fk_id_other5', columns=[id_other5], referencedColumns=[id_other_ref]),
+            ]
+        )
+        self.assertEquals(
+            'class TableTest(DECLARATIVE_BASE):\n'
+            '\n'
+            '    __tablename__ = \'table_test\'\n'
+            '    __table_args__ = (\n'
+            '        {\'mysql_charset\': \'utf8\', \'sqlite_autoincrement\': True}\n'
+            '    )\n'
+            '\n'
+            '    id = Column(INTEGER, nullable=False, autoincrement=True, primary_key=True)  # pylint: disable=invalid-name\n'
+            '    id_other = Column(\n'
+            '        INTEGER, ForeignKey("table_test_other.id", name="fk_id_other", onupdate="SET NULL"), nullable=False\n'
+            '    )\n'
+            '    id_other2 = Column(\n'
+            '        INTEGER, ForeignKey("table_test_other.id", name="fk_id_other2", onupdate="SET NULL"), nullable=False\n'
+            '    )\n'
+            '    id_other3 = Column(\n'
+            '        INTEGER, ForeignKey("table_test_other.id", name="fk_id_other3", onupdate="SET NULL"), nullable=False\n'
+            '    )\n'
+            '    id_other4 = Column(\n'
+            '        INTEGER, ForeignKey("table_test_other.id", name="fk_id_other4", onupdate="SET NULL"), nullable=False\n'
+            '    )\n'
+            '    id_other5 = Column(\n'
+            '        INTEGER, ForeignKey("table_test_other.id", name="fk_id_other5", onupdate="SET NULL"), nullable=False\n'
+            '    )\n'
+            '\n'
+            '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other], backref="tableTest")\n'
+            '    # relation for id_other2.ForeignKey ignored as configured in column comment\n'
+            '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other3])\n'
+            '    tableTestOther = relationship(\n'
+            '        "TableTestOther", foreign_keys=[id_other4], backref="tableTest", remote_side=[\'alias\']\n'
+            '    )\n'
+            '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other5], backref="newbr")\n'
+            '\n'
+            '    def __repr__(self):\n'
+            '        return self.__str__()\n'
+            '\n'
+            '    def __str__(self):\n'
+            '        return "<TableTest(%(id)s)>" % self.__dict__',
+            str(TableObject(table))
         )
