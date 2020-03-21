@@ -236,6 +236,9 @@ class ColumnObject(object):
                 self.options.get('backrefname', backrefname)
             )
 
+        if self.options.get('uselist', True) == 'False':
+            attr.kwargs['uselist'] = 'False'
+
         if self.options.get('remote_side', None):
             attr.kwargs['remote_side'] = '[%s]' % self.options.get('remote_side', None)
         return str(attr)

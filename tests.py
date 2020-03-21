@@ -263,10 +263,11 @@ class TestTableObject(unittest.TestCase):
         id_other3 = get_grt_column('id_other3', 'table_test', 'INT(16)', isNotNull=1, comment="backref=False")
         id_other4 = get_grt_column('id_other4', 'table_test', 'INT(16)', isNotNull=1, comment="remote_side='alias'")
         id_other5 = get_grt_column('id_other5', 'table_test', 'INT(16)', isNotNull=1, comment="backrefname=newbr")
+        id_other6 = get_grt_column('id_other6', 'table_test', 'INT(16)', isNotNull=1, comment="uselist=False")
 
         table = get_grt_table(
             'table_test',
-            columns=[id_col, id_other, id_other2, id_other3, id_other4, id_other5],
+            columns=[id_col, id_other, id_other2, id_other3, id_other4, id_other5, id_other6],
             indices=[get_grt_index(columns=[id_col])],
             foreignKeys=[
                 get_grt_foreignKey('fk_id_other', columns=[id_other], referencedColumns=[id_other_ref]),
@@ -274,8 +275,11 @@ class TestTableObject(unittest.TestCase):
                 get_grt_foreignKey('fk_id_other3', columns=[id_other3], referencedColumns=[id_other_ref]),
                 get_grt_foreignKey('fk_id_other4', columns=[id_other4], referencedColumns=[id_other_ref]),
                 get_grt_foreignKey('fk_id_other5', columns=[id_other5], referencedColumns=[id_other_ref]),
+                get_grt_foreignKey('fk_id_other6', columns=[id_other6], referencedColumns=[id_other_ref]),
             ]
         )
+
+        self.maxDiff = None
         self.assertEquals(
             'class TableTest(DECLARATIVE_BASE):\n'
             '\n'
@@ -300,6 +304,9 @@ class TestTableObject(unittest.TestCase):
             '    id_other5 = Column(\n'
             '        INTEGER, ForeignKey("table_test_other.id", name="fk_id_other5", onupdate="SET NULL"), nullable=False\n'
             '    )\n'
+            '    id_other6 = Column(\n'
+            '        INTEGER, ForeignKey("table_test_other.id", name="fk_id_other6", onupdate="SET NULL"), nullable=False\n'
+            '    )\n'
             '\n'
             '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other], backref="tableTest")\n'
             '    # relation for id_other2.ForeignKey ignored as configured in column comment\n'
@@ -308,6 +315,7 @@ class TestTableObject(unittest.TestCase):
             '        "TableTestOther", foreign_keys=[id_other4], backref="tableTest", remote_side=[\'alias\']\n'
             '    )\n'
             '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other5], backref="newbr")\n'
+            '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other6], backref="tableTest", uselist=False)\n'
             '\n'
             '    def __repr__(self):\n'
             '        return self.__str__()\n'
