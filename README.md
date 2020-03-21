@@ -175,6 +175,7 @@ optname=optvalue,optname=optvalue...
 
  * relation=False : disable relationship for this column
  * backref=False : disables backref for this relationship
+ * uselist=False : handled the relationship as a scalar instead of a list
  * backrefname=myName : rename the backref in the relationship
  * fkname=myName : rename the relationship itself
  * alias=myName : rename the column mapping name (DB keeps whatever the name in the schema is)
