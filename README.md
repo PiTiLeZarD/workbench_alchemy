@@ -1,4 +1,5 @@
-** Disclaimer **
+Disclaimer
+==========
 
 After years of inactivity, I found myself needing this project again. I'm surprised it still kinda works.
 
@@ -271,5 +272,5 @@ nosetests --with-coverage tests.py 2>&1 | grep sqlalchemy
 
 Which currently outputs:
 ```
-sqlalchemy_grt.py                  325    114    65%
+sqlalchemy_grt.py                  325     19    94%
 ```
