@@ -205,7 +205,6 @@ class TestColumnObject(unittest.TestCase):
             str(column_obj)
         )
 
-
     def test_backref_ignore(self):
         column_obj = ColumnObject(get_grt_column('test', 'tables', 'INTEGER', comment="relation=False"))
         column_ref = get_grt_column('ref', 'table_refs', 'INTEGER')
@@ -216,6 +215,16 @@ class TestColumnObject(unittest.TestCase):
 
         self.assertEquals(
             '    # relation for test.ForeignKey ignored as configured in column comment',
+            column_obj.getBackref()
+        )
+
+    def test_backref_uselist(self):
+        column_obj = ColumnObject(get_grt_column('test', 'tables', 'INTEGER', comment="backrefuselist=False"))
+        column_ref = get_grt_column('ref', 'table_refs', 'INTEGER')
+        column_obj.setForeignKey(get_grt_foreignKey('fk_test', referencedColumns=[column_ref]))
+
+        self.assertEquals(
+            '    tableRef = relationship("TableRef", foreign_keys=[test], backref=backref("tables", uselist=False))',
             column_obj.getBackref()
         )
 

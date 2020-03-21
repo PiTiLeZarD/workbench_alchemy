@@ -232,9 +232,16 @@ class ColumnObject(object):
         attr.kwargs['foreign_keys'] = '[{name}]'.format(name=self.name)
 
         if self.options.get('backref', True) != 'False':
-            attr.kwargs['backref'] = quote(
+            backref = AttributeObject(None, 'backref')
+
+            backref.args.append(quote(
                 self.options.get('backrefname', backrefname)
-            )
+            ))
+
+            if self.options.get('backrefuselist', True) == 'False':
+                backref.kwargs['uselist'] = 'False'
+
+            attr.kwargs['backref'] = backref.args[0] if len(backref.args) + len(backref.kwargs) == 1 else str(backref)
 
         if self.options.get('uselist', True) == 'False':
             attr.kwargs['uselist'] = 'False'
