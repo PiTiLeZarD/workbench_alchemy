@@ -194,7 +194,6 @@ class ColumnObject(object):
         self.primary = primary
         self.unique = unique
         self.foreign_key = None
-        self.foreign_column = None
 
         self.options = options(column.comment)
         self.column_type = USED_TYPES.get(self._column)
@@ -210,9 +209,8 @@ class ColumnObject(object):
         if self._column.defaultValue and 'CURRENT_TIMESTAMP' in self._column.defaultValue:
             USED_TYPES.IMPORT_DATETIME = True
 
-    def setForeignKey(self, foreign_key, foreign_column):
+    def setForeignKey(self, foreign_key):
         self.foreign_key = foreign_key
-        self.foreign_column = foreign_column
 
     def to_print(self):
         return self.options.get('toprint', 'True' if self.primary else 'False') == 'True'
@@ -227,7 +225,7 @@ class ColumnObject(object):
         backrefname = functionalize(self._column.owner.name)
 
         if self.options.get('relation', True) == 'False':
-            return TAB + "# relation <%s/%s> ignored for this table" % (fkname, backrefname)
+            return TAB + "# relation for %s.ForeignKey ignored as configured in column comment" % self.name
 
         attr = AttributeObject(fkname, 'relationship')
         attr.tab = TAB
@@ -359,9 +357,7 @@ class TableObject(object):
                 self.comments.append('Foreign Key ignored')
                 continue
 
-            self.getColumn(foreign_key.columns[0].name).setForeignKey(
-                foreign_key, self.getColumn(foreign_key.referencedColumns[0].name)
-            )
+            self.getColumn(foreign_key.columns[0].name).setForeignKey(foreign_key)
 
     def getColumn(self, name):
         for column in self.columns:
