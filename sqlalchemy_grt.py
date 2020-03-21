@@ -420,76 +420,84 @@ class TableObject(object):
 
 USED_TYPES = SqlaType()
 
-tables = []
-for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
-    print(" -> Working on %s" % table.name)
-    tables.append(TableObject(table))
+def generateExport():
+    tables = []
+    for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
+        print(" -> Working on %s" % table.name)
+        tables.append(TableObject(table))
 
-export = []
-export.append('"""')
-export.append('This file has been automatically generated with workbench_alchemy v%s' % VERSION)
-export.append('For more details please check here:')
-export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
-export.append('"""')
+    export = []
+    export.append('"""')
+    export.append('This file has been automatically generated with workbench_alchemy v%s' % VERSION)
+    export.append('For more details please check here:')
+    export.append('https://github.com/PiTiLeZarD/workbench_alchemy')
+    export.append('"""')
 
 
-def append_types(types, from_import, tab=TAB):
-    lines = []
-    if not len(types):
-        return lines
-    from_import = "from %s import" % from_import
-    types = pep8_list(types, first_row_pad=len(tab) + len(from_import))
-    lines.append(tab + "%s %s" % (from_import, types[0]))
-    if len(types) > 1:
-        lines[-1] += ' \\'
-    for index in range(1, len(types)):
-        lines.append(tab * 2 + types[index])
-        if index < len(types) - 1:
+    def append_types(types, from_import, tab=TAB):
+        lines = []
+        if not len(types):
+            return lines
+        from_import = "from %s import" % from_import
+        types = pep8_list(types, first_row_pad=len(tab) + len(from_import))
+        lines.append(tab + "%s %s" % (from_import, types[0]))
+        if len(types) > 1:
             lines[-1] += ' \\'
-    return lines
+        for index in range(1, len(types)):
+            lines.append(tab * 2 + types[index])
+            if index < len(types) - 1:
+                lines[-1] += ' \\'
+        return lines
 
-export.append("")
-export.append("import os")
-if USED_TYPES.IMPORT_DATETIME:
-    export.append("import datetime")
-export.append("from sqlalchemy.orm import relationship")
-export.append("from sqlalchemy import Column, ForeignKey")
-if USED_TYPES.IMPORT_UNIQUE_CONSTRAINT:
-    export.append("from sqlalchemy.schema import UniqueConstraint")
-export.append("from sqlalchemy.ext.declarative import declarative_base")
-if len(USED_TYPES.MIXINS):
-    export = export + append_types(USED_TYPES.MIXINS, '.mixins', tab='')
-export.append("")
-
-
-export.append("if os.environ.get('DB_TYPE', 'MySQL') == 'MySQL':")
-export = export + append_types(USED_TYPES.mysql, 'sqlalchemy.dialects.mysql')
-export.append("else:")
-export = export + append_types(USED_TYPES.sqla, 'sqlalchemy')
-if 'Integer' in USED_TYPES.sqla:
     export.append("")
-    export.append("    class INTEGER(Integer):")
-    export.append("        def __init__(self, *args, **kwargs):")
-    export.append("            super(Integer, self).__init__()  # pylint: disable=bad-super-call")
+    export.append("import os")
+    if USED_TYPES.IMPORT_DATETIME:
+        export.append("import datetime")
+    export.append("from sqlalchemy.orm import relationship")
+    export.append("from sqlalchemy import Column, ForeignKey")
+    if USED_TYPES.IMPORT_UNIQUE_CONSTRAINT:
+        export.append("from sqlalchemy.schema import UniqueConstraint")
+    export.append("from sqlalchemy.ext.declarative import declarative_base")
+    if len(USED_TYPES.MIXINS):
+        export = export + append_types(USED_TYPES.MIXINS, '.mixins', tab='')
     export.append("")
 
-    if 'TINYINT' in USED_TYPES.mysql:
-        export.append("    TINYINT = INTEGER")
 
-    if 'BIGINT' in USED_TYPES.mysql:
-        export.append("    BIGINT = INTEGER")
+    export.append("if os.environ.get('DB_TYPE', 'MySQL') == 'MySQL':")
+    export = export + append_types(USED_TYPES.mysql, 'sqlalchemy.dialects.mysql')
+    export.append("else:")
+    export = export + append_types(USED_TYPES.sqla, 'sqlalchemy')
+    if 'Integer' in USED_TYPES.sqla:
+        export.append("")
+        export.append("    class INTEGER(Integer):")
+        export.append("        def __init__(self, *args, **kwargs):")
+        export.append("            super(Integer, self).__init__()  # pylint: disable=bad-super-call")
+        export.append("")
 
-export.append("")
-export.append("DECLARATIVE_BASE = declarative_base()")
-export.append("")
+        if 'TINYINT' in USED_TYPES.mysql:
+            export.append("    TINYINT = INTEGER")
 
-for table in tables:
+        if 'BIGINT' in USED_TYPES.mysql:
+            export.append("    BIGINT = INTEGER")
+
     export.append("")
-    export.append(str(table))
+    export.append("DECLARATIVE_BASE = declarative_base()")
     export.append("")
 
-grt.modules.Workbench.copyToClipboard('\n'.join(export))
-print("-" * 20)
-print("-- SQLAlchemy export v%s" % VERSION)
-print("-" * 20)
-print("Copied to clipboard")
+    for table in tables:
+        export.append("")
+        export.append(str(table))
+        export.append("")
+
+    return export
+
+def copyExportToClipboard(export):
+    grt.modules.Workbench.copyToClipboard('\n'.join(export))
+    print("-" * 20)
+    print("-- SQLAlchemy export v%s" % VERSION)
+    print("-" * 20)
+    print("Copied to clipboard")
+
+
+if __name__ == '__main__':
+    copyExportToClipboard(generateExport())
