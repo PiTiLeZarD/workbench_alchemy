@@ -113,6 +113,10 @@ def pep8_list(data, tab='', first_row_pad=0):
     """pep8_list
 
     This function will render a list taking into account overall tab indent and an eventual first row pad.
+    To clarify, the first row pad is used in case of imports or variable assignment:
+
+    |-- first_row_pad --|
+    from something import [Here starts the pep8_list     ] | PEP8_LIMIT (default: 120)
 
     Arguments:
         data {list<str>} -- The list to pep8 render
@@ -155,18 +159,47 @@ def options(string):
 
 
 class AttributeObject(object):
+    """AttributObject class
 
-    def __init__(self, name, classname):
+    This class is a helper to manage attributes and their formatting.
+    The format of the attribute is as follows:
+
+    [tab]name = classname(*args, **kwargs)  # comment
+
+    so:
+     - str(Attribute('test', 'Something'))
+       -> test = Something()
+     - str(Attribute(None, 'Something', args=['a', '"b"'], kwargs={'c': 1}, comment="test"))
+       -> Something(a, "b", c=1)  # test
+     - and so on
+    """
+
+    def __init__(self, name, classname, tab='', args=None, kwargs=None, comment=None):
+        """Constructor
+
+        Will initialise all variables
+
+        Arguments:
+            name {str} -- Name of this attribute
+            classname {str} -- Class of this attribute
+
+        Keyword Arguments:
+            tab {str} -- The overall tab value to prepend to every line (default: {''})
+            args {list<str>} -- All args arguments (default: {None})
+            kwargs {dict<str:str>} -- All kwargs arguments (default: {None})
+            comment {str} -- The comment to add to the attribute (default: {None})
+        """
         self.name = name
         self.classname = classname
-        self.comment = None
-        self.args = []
-        self.kwargs = {}
-        self.tab = ''
+        self.comment = comment
+        self.args = args or []
+        self.kwargs = kwargs or {}
+        self.tab = tab
 
     def __str__(self):
         name = "%s = " % self.name if self.name else ''
         comment = '' if not self.comment else '  # %s' % self.comment
+
         # simple case
         if not len(self.args) and not len(self.kwargs):
             return self.tab + "{name}{classname}(){comment}".format(
@@ -190,6 +223,7 @@ class AttributeObject(object):
         if len(value) < PEP8_LIMIT:
             return value
 
+        # pep8 extended
         value = []
         value.append(self.tab + "{name}{classname}({comment}".format(
             name=name,
@@ -305,12 +339,12 @@ class ColumnObject(object):
         if self.options.get('relation', True) == 'False':
             return TAB + "# relation for %s.ForeignKey ignored as configured in column comment" % self.name
 
-        attr = AttributeObject(fkname, 'relationship')
-        attr.tab = TAB
-
-        attr.args.append(quote(singular(fktable)))
-
-        attr.kwargs['foreign_keys'] = '[{name}]'.format(name=self.name)
+        attr = AttributeObject(
+            fkname, 'relationship',
+            tab=TAB,
+            args=[quote(singular(fktable))],
+            kwargs={'foreign_keys': '[{name}]'.format(name=self.name)}
+        )
 
         if self.options.get('backref', True) != 'False':
             backref = AttributeObject(None, 'backref')
@@ -332,22 +366,25 @@ class ColumnObject(object):
         return str(attr)
 
     def __str__(self):
-        attr = AttributeObject(self.name, 'Column')
-        attr.tab = TAB
+        attr = AttributeObject(self.name, 'Column', tab=TAB)
 
         if self.name != self._column.name:
             attr.args.append(quote(self._column.name))
         attr.args.append(self.column_type)
 
         if self.foreign_key:
-            fk = AttributeObject(None, 'ForeignKey')
+            fk = AttributeObject(
+                None,
+                'ForeignKey',
+                args=[
+                    quote("%s.%s" % (
+                        self.foreign_key.referencedColumns[0].owner.name,
+                        self.foreign_key.referencedColumns[0].name
+                    ))
+                ],
+                kwargs={ 'name': quote(self.foreign_key.name) }
+            )
 
-            fk.args.append(quote("%s.%s" % (
-                self.foreign_key.referencedColumns[0].owner.name,
-                self.foreign_key.referencedColumns[0].name
-            )))
-
-            fk.kwargs['name'] = quote(self.foreign_key.name)
             if self.options.get('use_alter', False) == 'True':
                 fk.kwargs['use_alter'] = 'True'
             if self.foreign_key.deleteRule and self.foreign_key.deleteRule != "NO ACTION":
@@ -384,7 +421,6 @@ class ColumnObject(object):
                 attr.kwargs['onupdate'] = onupdate
         if self.name == 'id':
             attr.comment = 'pylint: disable=invalid-name'
-
         return str(attr)
 
 
@@ -473,10 +509,13 @@ class TableObject(object):
 
         value.append(TAB + "__table_args__ = (")
         for index_name, columns in self.uniques_multi.items():
-            attr = AttributeObject(None, 'UniqueConstraint')
-            attr.tab = TAB * 2
-            attr.args.append(quote(quote(', ').join(columns)).replace('\\', ''))
-            attr.kwargs['name'] = quote(index_name)
+            attr = AttributeObject(
+                None,
+                'UniqueConstraint',
+                tab=TAB*2,
+                args=[quote(quote(', ').join(columns)).replace('\\', '')],
+                kwargs={ 'name': quote(index_name) }
+            )
             value.append(str(attr) + ',')
         value.append(TAB * 2 + "%s" % self.table_args)
         value.append(TAB + ")")
@@ -495,8 +534,7 @@ class TableObject(object):
         value.append(TAB * 2 + 'return self.__str__()')
         value.append('')
         value.append(TAB + 'def __str__(self):')
-        attr = AttributeObject(None, self.name)
-        attr.args = ['%%(%s)s' % c.name for c in self.columns if c.to_print()]
+        attr = AttributeObject(None, self.name, args=['%%(%s)s' % c.name for c in self.columns if c.to_print()])
         value.append(TAB * 2 + 'return "<%s>" %% self.__dict__' % str(attr))
 
         return '\n'.join(value)

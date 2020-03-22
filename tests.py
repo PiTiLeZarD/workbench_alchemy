@@ -52,33 +52,31 @@ class TestAttributeObject(unittest.TestCase):
         self.assertEquals('test = Test()', str(AttributeObject('test', 'Test')))
 
     def test_01(self):
-        attr = AttributeObject('test', 'Test')
-        attr.comment = 'pylint-test'
+        attr = AttributeObject('test', 'Test', comment='pylint-test')
         self.assertEquals('test = Test()  # pylint-test', str(attr))
 
     def test_02(self):
-        attr = AttributeObject('test', 'Test')
-        attr.args.extend(['"a"', 'b', 'c'])
-        attr.kwargs['test'] = '"value"'
-        attr.comment = 'pylint-test'
-        attr.tab = '    '
+        attr = AttributeObject(
+            'test', 'Test', tab=' '*4, comment='pylint-test',
+            args=['"a"', 'b', 'c'], kwargs={'test':'"value"'}
+        )
         self.assertEquals('    test = Test("a", b, c, test="value")  # pylint-test', str(attr))
 
     def test_03(self):
         self.assertEquals('Test()', str(AttributeObject(None, 'Test')))
 
     def test_04(self):
-        attr = AttributeObject('test', 'Test')
-        attr.tab = '    '
-        attr.args.extend(['"qwertyuiop"', 'asdfghjkl', 'zxcvbnm', 'poiuytrew', 'qwertyui'])
-        attr.comment = 'pylint-test'
-        attr.kwargs.update({
-            'sdljfsdf': '12',
-            'sldkjfasdf': '"ewuhofnocnwoedsf"',
-            'eoripu': '"ewiu"',
-            'cxmvbxcvmnb': '"sdkjhflknslkfwelcwiemoimcoiwemc"',
-            's230948d': '"ewuhofnocnwoedsf"',
-        })
+        attr = AttributeObject(
+            'test', 'Test', tab=' '*4, comment='pylint-test',
+            args=['"qwertyuiop"', 'asdfghjkl', 'zxcvbnm', 'poiuytrew', 'qwertyui'],
+            kwargs={
+                'sdljfsdf': '12',
+                'sldkjfasdf': '"ewuhofnocnwoedsf"',
+                'eoripu': '"ewiu"',
+                'cxmvbxcvmnb': '"sdkjhflknslkfwelcwiemoimcoiwemc"',
+                's230948d': '"ewuhofnocnwoedsf"',
+            }
+        )
         expected = [
             '    test = Test(  # pylint-test',
             '        "qwertyuiop", asdfghjkl, zxcvbnm, poiuytrew, qwertyui, sdljfsdf=12, sldkjfasdf="ewuhofnocnwoedsf",',
@@ -88,8 +86,7 @@ class TestAttributeObject(unittest.TestCase):
         self.assertEquals('\n'.join(expected), str(attr))
 
     def test_05(self):
-        attr = AttributeObject(None, 'Integer')
-        attr.kwargs['test'] = 'True'
+        attr = AttributeObject(None, 'Integer', kwargs={'test': True})
         self.assertEquals('Integer(test=True)', str(attr))
 
 
