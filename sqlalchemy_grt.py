@@ -197,16 +197,13 @@ class AttributeObject(object):
         self.tab = tab
 
     def __str__(self):
+        """String representation of this Attribute
+
+        Returns:
+            str -- The attribute in the right format (condensed or pep8extended)
+        """
         name = "%s = " % self.name if self.name else ''
         comment = '' if not self.comment else '  # %s' % self.comment
-
-        # simple case
-        if not len(self.args) and not len(self.kwargs):
-            return self.tab + "{name}{classname}(){comment}".format(
-                name=name,
-                classname=self.classname,
-                comment=comment
-            )
 
         # condensed
         arguments = ", ".join(self.args)
