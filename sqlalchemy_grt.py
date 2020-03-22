@@ -475,7 +475,7 @@ class TableObject(object):
         for index_name, columns in self.uniques_multi.items():
             attr = AttributeObject(None, 'UniqueConstraint')
             attr.tab = TAB * 2
-            attr.args.append(quote(quote(', ').join(columns)))
+            attr.args.append(quote(quote(', ').join(columns)).replace('\\', ''))
             attr.kwargs['name'] = quote(index_name)
             value.append(str(attr) + ',')
         value.append(TAB * 2 + "%s" % self.table_args)

@@ -81,7 +81,7 @@ class Customer(DECLARATIVE_BASE):
 
     __tablename__ = 'customers'
     __table_args__ = (
-        UniqueConstraint("name\", \"email", name="index2"),
+        UniqueConstraint("name", "email", name="index2"),
         {'mysql_engine': 'InnoDB', 'sqlite_autoincrement': True, 'mysql_charset': 'utf8'}
     )
 
