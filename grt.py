@@ -49,7 +49,7 @@ def get_grt_index(index_type='PRIMARY', columns=None):
     )
 
 
-def get_grt_table(table_name, columns=None, indices=None, foreignKeys=None, tableEngine=None, charset='utf8'):
+def get_grt_table(table_name, columns=None, indices=None, foreignKeys=None, tableEngine=None, charset='utf8', comment=None):
     """Mock a table
 
     Returns a Mock object representing the basic needs of a table
@@ -63,6 +63,7 @@ def get_grt_table(table_name, columns=None, indices=None, foreignKeys=None, tabl
         foreignKeys {list} -- All the foreign keys of the table (default: {None})
         tableEngine {str} -- Table engine if required (default: {None})
         charset {str} -- Charset (default: {'utf8'})
+        comment {str} -- Comment (default: {None})
 
     Returns:
         MagicMock -- GRT Compatible Table
@@ -75,6 +76,8 @@ def get_grt_table(table_name, columns=None, indices=None, foreignKeys=None, tabl
         foreignKeys=foreignKeys or []
     )
     table.name = table_name
+    if comment is not None:
+        table.comment = comment
     for c in table.columns:
         c.owner = table
     return table
@@ -107,7 +110,7 @@ def get_grt_column(column_name, table_name, sql_type, defaultValue=None, comment
         isNotNull=isNotNull,
         autoIncrement=autoIncrement
     )
+    column.name = column_name
     if comment is not None:
         column.comment = comment
-    column.name = column_name
     return column

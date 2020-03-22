@@ -163,8 +163,16 @@ optname=optvalue;optname=optvalue...
 
 #### Option on the table
 
- * norelations will disable all relations for this table (should update that to relations=False)
- * abstract will create a tablename-less abstract class
+ * abstract=True : will skip DECLARATIVE_BASE and inherit from object instead. Will also remove \__tablename__
+```python
+class TableTest(object):
+```
+ * mixins=SomeClass,OrOther : this will add classes to the inheritence list.
+```python
+from .mixins import SomeClass, OrOther
+...
+class TableTest(DECLARATIVE_BASE, SomeClass, OrOther):
+```
 
 #### Option on the fields
 

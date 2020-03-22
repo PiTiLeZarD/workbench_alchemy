@@ -250,7 +250,7 @@ class TestTableObject(unittest.TestCase):
 
     def test_basics(self):
         id_col = get_grt_column('id', 'table_test', 'INT(16)', isNotNull=1, autoIncrement=1)
-        name_col = get_grt_column('name', 'table_test', 'VARCHAR(145)', isNotNull=1)
+        name_col = get_grt_column('name', 'table_test', 'VARCHAR(145)', isNotNull=1, comment="toprint=True")
         description_col = get_grt_column('description', 'table_test', 'BLOB')
 
         table = get_grt_table(
@@ -275,7 +275,7 @@ class TestTableObject(unittest.TestCase):
             '        return self.__str__()\n'
             '\n'
             '    def __str__(self):\n'
-            '        return "<TableTest(%(id)s)>" % self.__dict__',
+            '        return "<TableTest(%(id)s, %(name)s)>" % self.__dict__',
             str(TableObject(table))
         )
 
@@ -342,6 +342,61 @@ class TestTableObject(unittest.TestCase):
             '    )\n'
             '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other5], backref="newbr")\n'
             '    tableTestOther = relationship("TableTestOther", foreign_keys=[id_other6], backref="tableTest", uselist=False)\n'
+            '\n'
+            '    def __repr__(self):\n'
+            '        return self.__str__()\n'
+            '\n'
+            '    def __str__(self):\n'
+            '        return "<TableTest(%(id)s)>" % self.__dict__',
+            str(TableObject(table))
+        )
+
+    def test_mixins(self):
+        id_col = get_grt_column('id', 'table_test', 'INT(16)', isNotNull=1, autoIncrement=1)
+
+        table = get_grt_table(
+            'table_test',
+            columns=[id_col],
+            indices=[get_grt_index(columns=[id_col])],
+            comment="mixins=OtherClass,SomethingElse"
+        )
+
+        self.assertEquals(
+            'class TableTest(DECLARATIVE_BASE, OtherClass, SomethingElse):\n'
+            '\n'
+            '    __tablename__ = \'table_test\'\n'
+            '    __table_args__ = (\n'
+            '        {\'mysql_charset\': \'utf8\', \'sqlite_autoincrement\': True}\n'
+            '    )\n'
+            '\n'
+            '    id = Column(INTEGER, nullable=False, autoincrement=True, primary_key=True)  # pylint: disable=invalid-name\n'
+            '\n'
+            '    def __repr__(self):\n'
+            '        return self.__str__()\n'
+            '\n'
+            '    def __str__(self):\n'
+            '        return "<TableTest(%(id)s)>" % self.__dict__',
+            str(TableObject(table))
+        )
+
+    def test_abstract(self):
+        id_col = get_grt_column('id', 'table_test', 'INT(16)', isNotNull=1, autoIncrement=1)
+
+        table = get_grt_table(
+            'table_test',
+            columns=[id_col],
+            indices=[get_grt_index(columns=[id_col])],
+            comment="abstract=True"
+        )
+
+        self.assertEquals(
+            'class TableTest(object):\n'
+            '\n'
+            '    __table_args__ = (\n'
+            '        {\'mysql_charset\': \'utf8\', \'sqlite_autoincrement\': True}\n'
+            '    )\n'
+            '\n'
+            '    id = Column(INTEGER, nullable=False, autoincrement=True, primary_key=True)  # pylint: disable=invalid-name\n'
             '\n'
             '    def __repr__(self):\n'
             '        return self.__str__()\n'
