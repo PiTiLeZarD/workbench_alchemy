@@ -3,13 +3,8 @@ Disclaimer
 
 After years of inactivity, I found myself needing this project again. I'm surprised it still kinda works.
 
-Here is the plan:
- - Increase test coverage up to the point I'm confident that what should work, still works
- - Add documentation around all of these objects I have
- - More PEP8 and Python3 updates
- - Check the workbench GRT changelog to see what I can simplify/add/remove
- - Check the sqlalchemy changelog and do the same thing
- - Test it all in a real project to see if it's still usable
+TODO:
+ - Check pull request and include the multi column indices if needed
 
 
 
