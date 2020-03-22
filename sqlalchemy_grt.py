@@ -7,7 +7,7 @@ import grt
 import re
 from collections import defaultdict
 
-VERSION = '0.3'
+VERSION = '0.4'
 
 TAB = " "*4
 PEP8_LIMIT = 120

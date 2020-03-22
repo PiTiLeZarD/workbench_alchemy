@@ -1,13 +1,3 @@
-Disclaimer
-==========
-
-After years of inactivity, I found myself needing this project again. I'm surprised it still kinda works.
-
-TODO:
- - Check pull request and include the multi column indices if needed
-
-
-
 workbench_alchemy
 =================
 
@@ -42,7 +32,7 @@ On execution it should look like this:
  -> Working on localities
  -> Working on invoices
 --------------------
--- SQLAlchemy export v0.3
+-- SQLAlchemy export v0.4
 --------------------
 Copied to clipboard
 Execution finished
@@ -54,7 +44,7 @@ Then you just have to paste it somewhere, hopefully it looks like this:
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 """
-This file has been automatically generated with workbench_alchemy v0.3
+This file has been automatically generated with workbench_alchemy v0.4
 For more details please check here:
 https://github.com/PiTiLeZarD/workbench_alchemy
 """
