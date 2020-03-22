@@ -158,7 +158,7 @@ I started to add options here and there, it's probably a good idea to keep track
 
 Options are done in the comment part of fields/tables on the form:
 ```
-optname=optvalue,optname=optvalue...
+optname=optvalue;optname=optvalue...
 ```
 
 #### Option on the table

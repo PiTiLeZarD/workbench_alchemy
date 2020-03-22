@@ -3,7 +3,7 @@ import unittest
 from mock import MagicMock, patch
 
 from sqlalchemy_grt import AttributeObject, ColumnObject, camelize, functionalize, quote, endsWith, \
-    singular, SqlaType, TableObject, pep8_list, PEP8_LIMIT, TAB
+    singular, SqlaType, TableObject, pep8_list, PEP8_LIMIT, TAB, options
 
 from grt import get_grt_foreignKey, get_grt_column, get_grt_index, get_grt_table
 
@@ -44,6 +44,14 @@ class TestUtils(unittest.TestCase):
         self.assertEquals(2, len(pep8data))
         self.assertEquals('X'*PEP8_LIMIT + ',', pep8data[0])
         self.assertEquals(', '.join(['X'*5]*5), pep8data[1])
+
+    def test_options(self):
+        opt = options("a=1;b=2;c=3,4")
+        self.assertTrue(type(opt) is dict)
+        self.assertEquals(3, len(opt))
+        self.assertEquals('1', opt['a'])
+        self.assertEquals('2', opt['b'])
+        self.assertEquals('3,4', opt['c'])
 
 
 class TestAttributeObject(unittest.TestCase):
@@ -188,7 +196,7 @@ class TestColumnObject(unittest.TestCase):
 
     def test_backref(self):
         column_obj = ColumnObject(
-            get_grt_column('test', 'tables', 'INTEGER', comment="remote_side=remote_test,use_alter=True")
+            get_grt_column('test', 'tables', 'INTEGER', comment="remote_side=remote_test;use_alter=True")
         )
 
         column_ref = get_grt_column('ref', 'table_refs', 'INTEGER')

@@ -147,7 +147,7 @@ def options(string):
     """Options
 
     This function will read a tring and give you a dict of options based on this formatting:
-     eg: option1=a,options2=b -> { 'option1': a, 'option2': 'b' }
+     eg: option1=a;options2=b -> { 'option1': a, 'option2': 'b' }
 
     Arguments:
         string {str} -- The string to extract options from
@@ -155,7 +155,7 @@ def options(string):
     Returns:
         dict<str:str> -- The dict representing these options
     """
-    return dict([t.split('=') for t in string.replace('“', '"').replace('”', '"').split(',') if '=' in t])
+    return dict([t.split('=') for t in string.replace('“', '"').replace('”', '"').split(';') if '=' in t])
 
 
 class AttributeObject(object):
