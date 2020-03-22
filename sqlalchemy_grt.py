@@ -181,7 +181,7 @@ class AttributeObject(object):
      - and so on
     """
 
-    def __init__(self, name, classname, tab='', args=None, kwargs=None, comment=None):
+    def __init__(self, name, classname, tab='', args=None, kwargs=None, comment=None, extended=False):
         """Constructor
 
         Will initialise all variables
@@ -195,6 +195,7 @@ class AttributeObject(object):
             args {list<str>} -- All args arguments (default: {None})
             kwargs {dict<str:str>} -- All kwargs arguments (default: {None})
             comment {str} -- The comment to add to the attribute (default: {None})
+            extended {bool} -- Force the extended output (default: {False})
         """
         self.name = name
         self.classname = classname
@@ -202,6 +203,7 @@ class AttributeObject(object):
         self.args = args or []
         self.kwargs = kwargs or {}
         self.tab = tab
+        self.extended = extended
 
     def __str__(self):
         """String representation of this Attribute
@@ -213,25 +215,26 @@ class AttributeObject(object):
         comment = '' if not self.comment else '  # %s' % self.comment
 
         # condensed
-        arguments = ", ".join(self.args)
-        if len(self.args) and len(self.kwargs):
-            arguments += ', '
-        if len(self.kwargs):
-            arguments += ", ".join(['%s=%s' % item for item in self.kwargs.items()])
-        value = self.tab + "{name}{classname}({arguments}){comment}".format(
-            name=name,
-            classname=self.classname,
-            arguments=arguments,
-            comment=comment
-        )
-        if len(value) < PEP8_LIMIT:
-            return value
+        if not self.extended:
+            arguments = ", ".join(self.args)
+            if len(self.args) and len(self.kwargs):
+                arguments += ', '
+            if len(self.kwargs):
+                arguments += ", ".join(['%s=%s' % item for item in self.kwargs.items()])
+            value = self.tab + "{name}{classname}({arguments}){comment}".format(
+                name=name,
+                classname=self.classname or '',
+                arguments=arguments,
+                comment=comment
+            )
+            if len(value) < PEP8_LIMIT:
+                return value
 
         # pep8 extended
         value = []
         value.append(self.tab + "{name}{classname}({comment}".format(
             name=name,
-            classname=self.classname,
+            classname=self.classname or '',
             comment=comment
         ))
 
@@ -274,6 +277,7 @@ class SqlaType(object):
 
     IMPORT_DATETIME = False
     IMPORT_UNIQUE_CONSTRAINT = False
+    IMPORT_INDEX = False
     MIXINS = set()
 
     def __init__(self):
@@ -515,19 +519,28 @@ class TableObject(object):
         self.options = options(table.comment)
         self.comments = []
         self.table_args = {}
+        self.table_args_ext = []
         self.columns = []
 
         self.indices = defaultdict(set)
-        self.uniques_multi = defaultdict(set)
 
         for index in self._table.indices:
             columns = [c.referencedColumn.name for c in index.columns]
-            if index.indexType == 'UNIQUE' and len(index.columns) > 1:
-                self.uniques_multi[index.name].update(columns)
-            self.indices[index.indexType].update(columns)
+            if index.indexType in {'UNIQUE', 'INDEX'} and len(index.columns) > 1:
+                self.table_args_ext.extend([str(AttributeObject(
+                    None,
+                    'UniqueConstraint' if index.indexType == 'UNIQUE' else 'Index',
+                    args=[quote(quote(', ').join(sorted(columns))).replace('\\', '')],
+                    kwargs={ 'name': quote(index.name) }
+                ))])
 
-        if len(self.uniques_multi):
-            USED_TYPES.IMPORT_UNIQUE_CONSTRAINT = True
+                if index.indexType == 'UNIQUE':
+                    USED_TYPES.IMPORT_UNIQUE_CONSTRAINT = True
+                else:
+                    USED_TYPES.IMPORT_INDEX = True
+
+                self.indices['multi'].update(columns)
+            self.indices[index.indexType].update(columns)
 
         if 'mixins' in self.options:
             USED_TYPES.MIXINS.update(self.options['mixins'].split(','))
@@ -559,11 +572,9 @@ class TableObject(object):
         for column in self._table.columns:
             self.columns.append(ColumnObject(
                 column,
-                index=column.name in self.indices.get('INDEX', []),
                 primary=column.name in self.indices.get('PRIMARY', []),
-                unique=column.name in self.indices.get('UNIQUE', [])
-                and column.name not in [c for clist in self.uniques_multi.values()
-                                        for c in clist]
+                index=column.name in self.indices.get('INDEX', []) and column.name not in self.indices.get('multi', []),
+                unique=column.name in self.indices.get('UNIQUE', []) and column.name not in self.indices.get('multi', [])
             ))
 
         # link columns together with foreign keys
@@ -613,18 +624,13 @@ class TableObject(object):
         if 'abstract' not in self._table.comment:
             value.append(TAB + "__tablename__ = '%s'" % self._table.name)
 
-        value.append(TAB + "__table_args__ = (")
-        for index_name, columns in self.uniques_multi.items():
-            attr = AttributeObject(
-                None,
-                'UniqueConstraint',
-                tab=TAB*2,
-                args=[quote(quote(', ').join(columns)).replace('\\', '')],
-                kwargs={ 'name': quote(index_name) }
-            )
-            value.append(str(attr) + ',')
-        value.append(TAB * 2 + "%s" % self.table_args)
-        value.append(TAB + ")")
+        value.append(str(AttributeObject(
+            "__table_args__",
+            None,
+            args=[str(self.table_args)] + self.table_args_ext,
+            tab=TAB,
+            extended=True
+        )))
 
         value.append('')
         value.extend([str(c) for c in self.columns])
@@ -692,8 +698,15 @@ def generateExport():
         export.append("import datetime")
     export.append("from sqlalchemy.orm import relationship")
     export.append("from sqlalchemy import Column, ForeignKey")
+
+    sqlaschema = []
     if USED_TYPES.IMPORT_UNIQUE_CONSTRAINT:
-        export.append("from sqlalchemy.schema import UniqueConstraint")
+        sqlaschema.append('UniqueConstraint')
+    if USED_TYPES.IMPORT_INDEX:
+        sqlaschema.append('Index')
+    if len(sqlaschema) > 0:
+        export = export + append_types(sqlaschema, 'sqlalchemy.schema', tab='')
+
     export.append("from sqlalchemy.ext.declarative import declarative_base")
     if len(USED_TYPES.MIXINS):
         export = export + append_types(USED_TYPES.MIXINS, '.mixins', tab='')

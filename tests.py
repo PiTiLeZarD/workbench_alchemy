@@ -72,6 +72,7 @@ class TestAttributeObject(unittest.TestCase):
 
     def test_03(self):
         self.assertEquals('Test()', str(AttributeObject(None, 'Test')))
+        self.assertEquals('test = ()', str(AttributeObject('test', None)))
 
     def test_04(self):
         attr = AttributeObject(
@@ -96,6 +97,15 @@ class TestAttributeObject(unittest.TestCase):
     def test_05(self):
         attr = AttributeObject(None, 'Integer', kwargs={'test': True})
         self.assertEquals('Integer(test=True)', str(attr))
+
+    def test_06(self):
+        attr = AttributeObject('test', 'Class', args=['param'], extended=True)
+        self.assertEquals(
+            'test = Class(\n'
+            '    param\n'
+            ')',
+            str(attr)
+        )
 
 
 class TestGetType(unittest.TestCase):
@@ -155,7 +165,7 @@ class TestColumnObject(unittest.TestCase):
 
     def test_name_switch_primary_key(self):
         column = get_grt_column('id_something', 'table_test', 'INTEGER')
-        column.owner.indices.append(get_grt_index(columns=[column]))
+        column.owner.indices.append(get_grt_index('i_test', columns=[column]))
         column_obj = ColumnObject(column, primary=True)
         self.assertEquals('id', column_obj.name)
 
@@ -256,7 +266,7 @@ class TestTableObject(unittest.TestCase):
         table = get_grt_table(
             'table_test',
             columns=[id_col, name_col, description_col],
-            indices=[get_grt_index(columns=[id_col])]
+            indices=[get_grt_index('i_test', columns=[id_col])]
         )
 
         self.assertEquals(
@@ -294,7 +304,7 @@ class TestTableObject(unittest.TestCase):
         table = get_grt_table(
             'table_test',
             columns=[id_col, id_other, id_other2, id_other3, id_other4, id_other5, id_other6],
-            indices=[get_grt_index(columns=[id_col])],
+            indices=[get_grt_index('i_test', columns=[id_col])],
             foreignKeys=[
                 get_grt_foreignKey('fk_id_other', columns=[id_other], referencedColumns=[id_other_ref]),
                 get_grt_foreignKey('fk_id_other2', columns=[id_other2], referencedColumns=[id_other_ref]),
@@ -357,7 +367,7 @@ class TestTableObject(unittest.TestCase):
         table = get_grt_table(
             'table_test',
             columns=[id_col],
-            indices=[get_grt_index(columns=[id_col])],
+            indices=[get_grt_index('i_test', columns=[id_col])],
             comment="mixins=OtherClass,SomethingElse"
         )
 
@@ -385,7 +395,7 @@ class TestTableObject(unittest.TestCase):
         table = get_grt_table(
             'table_test',
             columns=[id_col],
-            indices=[get_grt_index(columns=[id_col])],
+            indices=[get_grt_index('i_test', columns=[id_col])],
             comment="abstract=True"
         )
 
@@ -403,5 +413,52 @@ class TestTableObject(unittest.TestCase):
             '\n'
             '    def __str__(self):\n'
             '        return "<TableTest(%(id)s)>" % self.__dict__',
+            str(TableObject(table))
+        )
+
+    def test_indices(self):
+        id_col = get_grt_column('id', 'table_test', 'INT(16)', isNotNull=1, autoIncrement=1)
+        name_col = get_grt_column('name', 'table_test', 'VARCHAR(145)', isNotNull=1, comment="toprint=True")
+        description_col = get_grt_column('description', 'table_test', 'BLOB')
+        unique_1 = get_grt_column('unique_1', 'table_test', 'INT(16)')
+        unique_2 = get_grt_column('unique_2', 'table_test', 'INT(16)')
+        index_1 = get_grt_column('index_1', 'table_test', 'INT(16)')
+        index_2 = get_grt_column('index_2', 'table_test', 'INT(16)')
+
+        table = get_grt_table(
+            'table_test',
+            columns=[id_col, name_col, description_col, unique_1, unique_2, index_1, index_2],
+            indices=[
+                get_grt_index('i_primary', columns=[id_col]),
+                get_grt_index('i_unique_single', 'UNIQUE', columns=[name_col]),
+                get_grt_index('i_index_single', 'INDEX', columns=[description_col]),
+                get_grt_index('i_unique_multi', 'UNIQUE', columns=[unique_1, unique_2]),
+                get_grt_index('i_index_multi', 'INDEX', columns=[index_1, index_2]),
+            ]
+        )
+        self.maxDiff = None
+        self.assertEquals(
+            'class TableTest(DECLARATIVE_BASE):\n'
+            '\n'
+            '    __tablename__ = \'table_test\'\n'
+            '    __table_args__ = (\n'
+            '        {\'mysql_charset\': \'utf8\', \'sqlite_autoincrement\': True},\n'
+            '        UniqueConstraint("unique_1", "unique_2", name="i_unique_multi"),\n'
+            '        Index("index_1", "index_2", name="i_index_multi")\n'
+            '    )\n'
+            '\n'
+            '    id = Column(INTEGER, nullable=False, autoincrement=True, primary_key=True)  # pylint: disable=invalid-name\n'
+            '    name = Column(VARCHAR(145), nullable=False, unique=True)\n'
+            '    description = Column(BLOB, index=True)\n'
+            '    unique_1 = Column(INTEGER)\n'
+            '    unique_2 = Column(INTEGER)\n'
+            '    index_1 = Column(INTEGER)\n'
+            '    index_2 = Column(INTEGER)\n'
+            '\n'
+            '    def __repr__(self):\n'
+            '        return self.__str__()\n'
+            '\n'
+            '    def __str__(self):\n'
+            '        return "<TableTest(%(id)s, %(name)s)>" % self.__dict__',
             str(TableObject(table))
         )

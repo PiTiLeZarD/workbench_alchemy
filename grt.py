@@ -31,10 +31,13 @@ def get_grt_foreignKey(fk_name, columns=None, referencedColumns=None, deleteRule
     return fk
 
 
-def get_grt_index(index_type='PRIMARY', columns=None):
+def get_grt_index(name, index_type='PRIMARY', columns=None):
     """Mock an index
 
     Returns a Mock object representing the basic needs of an index
+
+    Arguments:
+        name {str} -- The name of the index
 
     Keyword Arguments:
         index_type {str} -- The type of index (default: {'PRIMARY'})
@@ -43,10 +46,12 @@ def get_grt_index(index_type='PRIMARY', columns=None):
     Returns:
         MagicMock -- GRT Compatible Index
     """
-    return MagicMock(
+    indx = MagicMock(
         columns=[MagicMock(referencedColumn=c) for c in (columns or [])],
         indexType=index_type
     )
+    indx.name = name
+    return indx
 
 
 def get_grt_table(table_name, columns=None, indices=None, foreignKeys=None, tableEngine=None, charset='utf8', comment=None):
