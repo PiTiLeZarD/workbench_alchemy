@@ -167,10 +167,17 @@ class AttributeObject(object):
     [tab]name = classname(*args, **kwargs)  # comment
 
     so:
-     - str(Attribute('test', 'Something'))
+     - str(AttributeObject('test', 'Something'))
        -> test = Something()
-     - str(Attribute(None, 'Something', args=['a', '"b"'], kwargs={'c': 1}, comment="test"))
+     - str(AttributeObject(None, 'Something', args=['a', '"b"'], kwargs={'c': 1}, comment="test"))
        -> Something(a, "b", c=1)  # test
+     - str(AttributeObject(None, 'Something', args=['X'*120]*3, kwargs={'a': 1, 'b': 2}, comment="test"))
+       -> Something(  # test
+       ->     XXXX...........XXXX,
+       ->     XXXX...........XXXX,
+       ->     XXXX...........XXXX,
+       ->     a=1, b=2
+       -> )
      - and so on
     """
 
@@ -238,6 +245,11 @@ class AttributeObject(object):
 
 
 class SqlaType(object):
+    """Type Management
+
+    This class will keep track of all types used in order to import just what's needed. It also
+    keeps track of links between sqlalchemy types and mysqltypes.
+    """
 
     SQLALCHEMY_TYPESMAP = {
         'Varchar': 'String',
@@ -265,10 +277,24 @@ class SqlaType(object):
     MIXINS = set()
 
     def __init__(self):
+        """Constructor
+
+        Initialise empty sets for both sqla and mysql types
+        """
         self.sqla = set()
         self.mysql = set()
 
     def get(self, column):
+        """Retrieves a formatted column type
+
+        This will return the appropriate type to use in the object descriptions while caching sqla/mysql types.
+
+        Arguments:
+            column {db_Column} -- The GRT Column to extract the type from
+
+        Returns:
+            str -- The Formatted Type
+        """
         column_type = column.formattedType
         if column.formattedRawType in SqlaType.RAW_TYPE_MAP:
             column_type = SqlaType.RAW_TYPE_MAP[column.formattedRawType]
@@ -296,8 +322,27 @@ class SqlaType(object):
 
 
 class ColumnObject(object):
+    """ColumnObject
+
+    This is a wrapper for a GRT db_Column object. It adds logic around foreign keys, backref and the
+    __str__ function will take care of transforming this object to a sqlalchemy compatible python code
+    """
 
     def __init__(self, column, index=False, primary=False, unique=False):
+        """Constructor
+
+        This will initialise the column object. By default, every sqla object with only one primary key will be
+        renamed to id so every object has o.id. If you do not want this behaviour, comment out the code that does this
+        in this constructor.
+
+        Arguments:
+            column {db_Column} -- GRT Column
+
+        Keyword Arguments:
+            index {bool} -- Sets the index status (default: {False})
+            primary {bool} -- Sets the primary status (default: {False})
+            unique {bool} -- Sets the unique status (default: {False})
+        """
         self._column = column
         self.index = index
         self.primary = primary
@@ -319,12 +364,34 @@ class ColumnObject(object):
             USED_TYPES.IMPORT_DATETIME = True
 
     def setForeignKey(self, foreign_key):
+        """Mark this column as having a foreign key
+
+        Arguments:
+            foreign_key {db_ForeignKey} -- A GRT Foreign Key
+        """
         self.foreign_key = foreign_key
 
     def to_print(self):
+        """To Print Status
+
+        By having toprint=True, a column will be added to the __repr__ of the sqla object. Primary columns are always
+        printed by default.
+
+        Returns:
+            bool -- True if the option is set, False otherwise
+        """
         return self.options.get('toprint', 'True' if self.primary else 'False') == 'True'
 
     def getBackref(self):
+        """Return the backref attribute
+
+        This function is used by the table. It will return None if there is no foreign key set, a string otherwise.
+        That string is either the backref argument or a comment describing that the backref is ignored due to
+        the option relation=false
+
+        Returns:
+            str -- The backref or None
+        """
         if not self.foreign_key:
             return None
 
@@ -360,9 +427,15 @@ class ColumnObject(object):
 
         if self.options.get('remote_side', None):
             attr.kwargs['remote_side'] = '[%s]' % self.options.get('remote_side', None)
+
         return str(attr)
 
     def __str__(self):
+        """SQLAlchemy representation of that column
+
+        Returns:
+            str -- The SQLAlchemy python code for that column
+        """
         attr = AttributeObject(self.name, 'Column', tab=TAB)
 
         if self.name != self._column.name:
@@ -422,8 +495,20 @@ class ColumnObject(object):
 
 
 class TableObject(object):
+    """TableObject
+
+    This is a wrapper for a GRT db_Table object. It adds logic around foreign keys, indices and and the
+    __str__ function will take care of transforming this object to a sqlalchemy compatible python code
+    """
 
     def __init__(self, table):
+        """Constructor
+
+        This function will initialise the object and sets the appropriate foreign keys, indices and columns
+
+        Arguments:
+            table {[type]} -- [description]
+        """
         self._table = table
         self.name = singular(camelize(table.name))
 
@@ -451,6 +536,10 @@ class TableObject(object):
         self._setColumns()
 
     def _setTableArgs(self):
+        """private function setTableArgs
+
+        This will set the global options for that table
+        """
         if self._table.tableEngine:
             self.table_args['mysql_engine'] = self._table.tableEngine
 
@@ -462,6 +551,11 @@ class TableObject(object):
             self.table_args['sqlite_autoincrement'] = True
 
     def _setColumns(self):
+        """private function setColumns
+
+        This will browse all columns and initialise them with the proper db_Column and options. It also
+        links foreign keys properly
+        """
         for column in self._table.columns:
             self.columns.append(ColumnObject(
                 column,
@@ -481,6 +575,16 @@ class TableObject(object):
             self.getColumn(foreign_key.columns[0].name).setForeignKey(foreign_key)
 
     def getColumn(self, name):
+        """Retrieves a Column by name
+
+        This function will retrieve a column by name, either the GRT name or the aliased name
+
+        Arguments:
+            name {str} -- The name of the column to retriev
+
+        Returns:
+            ColumnObject -- The column requested or None
+        """
         for column in self.columns:
             if column.name == name:
                 return column
@@ -489,6 +593,11 @@ class TableObject(object):
         return None
 
     def __str__(self):
+        """SQLAlchemy representation of that table
+
+        Returns:
+            str -- The SQLAlchemy python code for that table
+        """
         value = []
 
         inherits_from = ['object' if self.options.get('abstract', 'False') == 'True' else 'DECLARATIVE_BASE']
@@ -540,6 +649,13 @@ class TableObject(object):
 USED_TYPES = SqlaType()
 
 def generateExport():
+    """Generate an Export
+
+    This function will iterate over all tables columns and will return the python file to be copied in the project
+
+    Returns:
+        list<str> -- All lines of the python file
+    """
     tables = []
     for table in grt.root.wb.doc.physicalModels[0].catalog.schemata[0].tables:
         print(" -> Working on %s" % table.name)
