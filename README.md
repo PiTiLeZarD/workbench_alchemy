@@ -51,6 +51,8 @@ Execution finished
 Then you just have to paste it somewhere, hopefully it looks like this:
 
 ```python
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
 """
 This file has been automatically generated with workbench_alchemy v0.3
 For more details please check here:
@@ -81,8 +83,8 @@ class Customer(DECLARATIVE_BASE):
 
     __tablename__ = 'customers'
     __table_args__ = (
-        UniqueConstraint("name", "email", name="index2"),
-        {'mysql_engine': 'InnoDB', 'sqlite_autoincrement': True, 'mysql_charset': 'utf8'}
+        {'mysql_engine': 'InnoDB', 'sqlite_autoincrement': True, 'mysql_charset': 'utf8'},
+        UniqueConstraint("email", "name", name="index2")
     )
 
     id = Column(  # pylint: disable=invalid-name
