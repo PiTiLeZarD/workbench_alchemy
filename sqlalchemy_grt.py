@@ -9,7 +9,7 @@ from collections import defaultdict
 
 VERSION = '0.3'
 
-TAB = "    "
+TAB = " "*4
 PEP8_LIMIT = 120
 
 AVAILABLE_TYPES = [
@@ -20,49 +20,118 @@ AVAILABLE_TYPES = [
     'YEAR']
 
 
-def camelize(name):
-    return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), name.lower())
+def camelize(string):
+    """Camelize
+
+    This function will transform a string in a camelized string.
+     eg: sOmEtHiNg_hErE -> SomethingHere
+
+    Arguments:
+        string {str} -- The string to camelize
+
+    Returns:
+        str -- The camelized string
+    """
+    return re.sub(r"(?:^|_)(.)", lambda x: x.group(0)[-1].upper(), string.lower())
 
 
-def functionalize(name):
-    return name[0].lower() + camelize(name)[1:]
+def functionalize(string):
+    """Functionalize
+
+    This function will return a functionalized string. It's essentially a camelized string with the first char as a lowercase
+     eg: sOmEtHiNg_hErE -> somethingHere
+
+    Arguments:
+        string {str} -- The string to functionalize
+
+    Returns:
+        str -- The functionalized string
+    """
+    return string[0].lower() + camelize(string)[1:]
 
 
-def quote(s):
-    return '"{s}"'.format(s=s)
+def quote(string):
+    """Quote
+
+    This function will quote a string:
+     eg: A String -> "A String"
+
+    Arguments:
+        string {str} -- The string to quote
+
+    Returns:
+        str -- The quoted string
+    """
+    return '"{string}"'.format(string=string.replace('"', '\\"'))
 
 
-def endsWith(name, all):
-    name = name.lower()
+def endsWith(string, all):
+    """endsWith
+
+    This function will tell you if a word ends with one of the provided ending
+
+    Arguments:
+        string {str} -- The string to test
+        all {set<str>} -- A set of all possible endings
+
+    Returns:
+        bool -- True if one of the ending matches, False otherwise
+    """
+    string = string.lower()
     for i in all:
-        if name.endswith(i):
+        if string.endswith(i):
             return True
     return False
 
 
-def singular(name):
-    if endsWith(name, ('indices',)):
-        name = name[:-4] + 'ex'
-    elif endsWith(name, ('suffixes',)):
-        name = name[:-3] + 'x'
-    elif endsWith(name, ('aliases', 'dresses')):
-        name = name[:-2]
-    elif name.endswith('ies'):
-        name = name[:-3] + 'y'
-    elif name.endswith('s'):
-        name = name[:-1]
-    return name
+def singular(string):
+    """Singular
+
+    This function will return the singular version of a string.
+     eg: Parties -> Party, Indices -> Index etc...
+
+    Arguments:
+        string {str} -- The string to singularise
+
+    Returns:
+        str -- The singular string
+    """
+    if endsWith(string, ('indices', 'indexes')):
+        string = string[:-4] + 'ex'
+    elif endsWith(string, ('suffixes',)):
+        string = string[:-3] + 'x'
+    elif endsWith(string, ('aliases', 'dresses')):
+        string = string[:-2]
+    elif string.endswith('ies'):
+        string = string[:-3] + 'y'
+    elif string.endswith('s'):
+        string = string[:-1]
+    return string
 
 
 def pep8_list(data, tab='', first_row_pad=0):
+    """pep8_list
+
+    This function will render a list taking into account overall tab indent and an eventual first row pad.
+
+    Arguments:
+        data {list<str>} -- The list to pep8 render
+
+    Keyword Arguments:
+        tab {str} -- The overall tab value to prepend to every line (default: {''})
+        first_row_pad {number} -- The pad for the first row (default: {0})
+
+    Returns:
+        list<str> -- The list formatted to pep8
+    """
     value = []
     temp = []
     for a in data:
         temp.append(a)
         pad = 0 if len(value) else first_row_pad
         if len(tab + ', '.join(temp)) >= PEP8_LIMIT - pad:
-            value.append(tab + ', '.join(temp[:-1]) + ',')
-            temp = [temp[-1]]
+            value.append(tab + ', '.join(temp[:-1] if len(temp) > 1 else [temp[0]]) + ',')
+            temp = [temp[-1]] if len(temp) > 1 else []
 
     if len(temp):
         value.append(tab + ', '.join(temp))
@@ -71,10 +140,22 @@ def pep8_list(data, tab='', first_row_pad=0):
 
 
 def options(string):
+    """Options
+
+    This function will read a tring and give you a dict of options based on this formatting:
+     eg: option1=a,options2=b -> { 'option1': a, 'option2': 'b' }
+
+    Arguments:
+        string {str} -- The string to extract options from
+
+    Returns:
+        dict<str:str> -- The dict representing these options
+    """
     return dict([t.split('=') for t in string.replace('“', '"').replace('”', '"').split(',') if '=' in t])
 
 
 class AttributeObject(object):
+
     def __init__(self, name, classname):
         self.name = name
         self.classname = classname

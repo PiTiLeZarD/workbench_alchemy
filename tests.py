@@ -3,7 +3,7 @@ import unittest
 from mock import MagicMock, patch
 
 from sqlalchemy_grt import AttributeObject, ColumnObject, camelize, functionalize, quote, endsWith, \
-    singular, SqlaType, TableObject
+    singular, SqlaType, TableObject, pep8_list, PEP8_LIMIT, TAB
 
 from grt import get_grt_foreignKey, get_grt_column, get_grt_index, get_grt_table
 
@@ -12,6 +12,7 @@ class TestUtils(unittest.TestCase):
 
     def test_quote(self):
         self.assertEquals('"test"', quote('test'))
+        self.assertEquals('"This \\"should\\" \'be\' appropriately quoted"', quote('This "should" \'be\' appropriately quoted'))
 
     def test_endswith(self):
         self.assertTrue(endsWith('something', ('ing', 'gni')))
@@ -32,6 +33,17 @@ class TestUtils(unittest.TestCase):
 
     def test_functionalize(self):
         self.assertEquals('somethingHere', functionalize('sOmEtHiNg_hErE'))
+
+    def test_pep8_list(self):
+        self.assertEquals('test string', pep8_list(['test string'])[0])
+        self.assertEquals('    test string', pep8_list(['test string'], tab=' '*4)[0])
+        self.assertEquals(4, len(pep8_list(['X'*int(PEP8_LIMIT/2)]*4)))
+
+        data = ['X'*PEP8_LIMIT] + ['X'*5]*5
+        pep8data = pep8_list(data)
+        self.assertEquals(2, len(pep8data))
+        self.assertEquals('X'*PEP8_LIMIT + ',', pep8data[0])
+        self.assertEquals(', '.join(['X'*5]*5), pep8data[1])
 
 
 class TestAttributeObject(unittest.TestCase):
