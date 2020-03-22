@@ -68,7 +68,7 @@ def quote(string):
 def endsWith(string, all):
     """endsWith
 
-    This function will tell you if a word ends with one of the provided ending
+    This function will tell you if a word ends with one of the provided endings
 
     Arguments:
         string {str} -- The string to test
