@@ -81,12 +81,12 @@ class Customer(DECLARATIVE_BASE):
 
     __tablename__ = 'customers'
     __table_args__ = (
-        UniqueConstraint("name", "email", name="index2"),
-        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'}
+        UniqueConstraint("name\", \"email", name="index2"),
+        {'mysql_engine': 'InnoDB', 'sqlite_autoincrement': True, 'mysql_charset': 'utf8'}
     )
 
     id = Column(  # pylint: disable=invalid-name
-        "id_customer", INTEGER(unsigned=True), autoincrement=False, primary_key=True, nullable=False
+        "id_customer", INTEGER(unsigned=True), autoincrement=True, primary_key=True, nullable=False
     )
     id_locality = Column(
         "locality_id", INTEGER(unsigned=True),
@@ -111,11 +111,11 @@ class Locality(DECLARATIVE_BASE):
 
     __tablename__ = 'localities'
     __table_args__ = (
-        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'}
+        {'mysql_engine': 'InnoDB', 'sqlite_autoincrement': True, 'mysql_charset': 'utf8'}
     )
 
     id = Column(  # pylint: disable=invalid-name
-        "id_locality", INTEGER(unsigned=True), autoincrement=False, primary_key=True, nullable=False
+        "id_locality", INTEGER(unsigned=True), autoincrement=True, primary_key=True, nullable=False
     )
     name = Column(VARCHAR(45), unique=True)
 
