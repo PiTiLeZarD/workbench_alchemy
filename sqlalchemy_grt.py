@@ -662,6 +662,8 @@ def generateExport():
         tables.append(TableObject(table))
 
     export = []
+    export.append('#!/usr/bin/env python')
+    export.append('#-*- coding: utf-8 -*-')
     export.append('"""')
     export.append('This file has been automatically generated with workbench_alchemy v%s' % VERSION)
     export.append('For more details please check here:')
